@@ -7,10 +7,15 @@ resource "helm_release" "cert-manager" {
   repository = "https://charts.jetstack.io"
   chart      = "cert-manager"
 
-  set {
-    name  = "installCRDs"
-    value = "true"
-  }
+  values = [yamlencode(
+    {
+      installCRDs = true
+      ingressShim = {
+        defaultIssuerName: "letsencrypt-production"
+        defaultIssuerKind: "ClusterIssuer"
+      }
+    }
+  )]
 }
 
 resource "helm_release" "letsencrypt-issuer" {

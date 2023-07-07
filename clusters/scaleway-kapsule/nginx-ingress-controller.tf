@@ -36,5 +36,5 @@ resource "helm_release" "nginx_ingress" {
 }
 
 locals {
-  ingress_domain_name = "${replace(scaleway_lb_ip.nginx_ip.ip_address, ".", "-")}.sslip.io"
+  ingress_domain_name = "${replace(scaleway_lb_ip.nginx_ip.ip_address, ".", "-")}.${var.magic_xip_domain}"
 }
