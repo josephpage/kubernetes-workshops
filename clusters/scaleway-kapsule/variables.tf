@@ -20,7 +20,7 @@ variable "scaleway_kapscule_cni" {
 }
 
 variable "scaleway_kubernetes_version" {
-  default = "1.27"
+  default = "1.30"
 }
 
 variable "scaleway_kubernetes_pool_node_type" {

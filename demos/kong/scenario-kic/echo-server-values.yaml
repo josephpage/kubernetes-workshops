@@ -1,0 +1,15 @@
+replicaCount: 5
+
+ingress:
+  enabled: true
+  hosts:
+    - host: echo.4-178-154-2.sslip.io
+      paths:
+        - /
+  annotations:
+    kubernetes.io/ingress.class: kong
+
+  application:
+    logs:
+      ignore:
+        ping: true

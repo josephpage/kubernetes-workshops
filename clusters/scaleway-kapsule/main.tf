@@ -89,3 +89,13 @@ resource "local_sensitive_file" "kubeconfig" {
 #     protocol = "TCP"
 #   }
 # }
+
+module "cert-manager" {
+  source = "../modules/cert-manager"
+  email = "jopa@octo.com"
+}
+
+module "grafana" {
+  source = "../modules/prometheus-grafana"
+  base_domain_name = local.ingress_domain_name
+}

@@ -31,7 +31,7 @@ resource "helm_release" "letsencrypt-issuer" {
     {
       nameOverride = "letsencrypt-${each.key}"
       fullnameOverride = "letsencrypt-${each.key}"
-      maintainerEmail = "jopa@octo.com"
+      maintainerEmail = var.email
       httpIssuer = {
         environment = each.key
         privateSecretRef = "clusterissuer-letsencrypt-${each.key}"

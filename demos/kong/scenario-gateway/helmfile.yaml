@@ -1,0 +1,37 @@
+# Helmfile
+repositories:
+  - name: ealenn
+    url: https://ealenn.github.io/charts
+  - name: kong
+    url: https://charts.konghq.com
+
+releases:
+  - name: kong-certificates
+    namespace: kong-gateway
+    createNamespace: true
+    chart: ./charts/kong-certificates/
+    version: 0.1.0
+    values:
+      - kong-certificates-values.yaml
+    wait: true
+  - name: gateway
+    namespace: kong-gateway
+    createNamespace: true
+    chart: kong/kong
+    version: 2.41.1
+    values:
+      - kong-values.yaml
+    needs:
+      - kong-gateway/kong-certificates
+    wait: true
+  - name: echo-server
+    namespace: echo-server
+    createNamespace: true
+    chart: ealenn/echo-server
+    version: 0.5.0
+    values:
+      - echo-server-values.yaml
+    needs:
+      - kong-gateway/gateway
+    wait: true
+

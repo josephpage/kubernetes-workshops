@@ -1,3 +1,9 @@
+locals {
+  grafana_user = "admin"
+  grafana_password = sensitive(random_password.grafana_password.result)
+  grafana_host = "grafana.${var.base_domain_name}"
+}
+
 # install prometheus+grafana with helm
 resource "helm_release" "prometheus" {
   name             = "prometheus"
@@ -37,7 +43,7 @@ resource "helm_release" "prometheus" {
         "service" : {
           "type" : "ClusterIP",
         },
-        "adminUser" : "admin",
+        "adminUser" : local.grafana_user,
         "ingress" : {
           "enabled" : true,
           "annotations" : {
@@ -45,13 +51,13 @@ resource "helm_release" "prometheus" {
             "cert-manager.io/cluster-issuer" : "letsencrypt-production",
           },
           "hosts" : [
-            "grafana.${local.ingress_domain_name}",
+            local.grafana_host,
           ],
           "tls" : [
             {
               "secretName" : "grafana-tls",
               "hosts" : [
-                "grafana.${local.ingress_domain_name}"
+                local.grafana_host
               ]
             }
           ]
@@ -63,7 +69,7 @@ resource "helm_release" "prometheus" {
   # Below are the sensitive values that we don't want to be stored in the state file
   set {
     name  = "grafana.adminPassword"
-    value = "${random_password.grafana_password.result}"
+    value = local.grafana_password
   }
 }
 

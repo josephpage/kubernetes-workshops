@@ -1,0 +1,15 @@
+replicaCount: 5
+
+ingress:
+  enabled: true
+  hosts:
+    - host: echo.98-66-253-33.sslip.io
+      paths:
+        - /
+  annotations:
+    kubernetes.io/ingress.class: nginx
+
+  application:
+    logs:
+      ignore:
+        ping: true
