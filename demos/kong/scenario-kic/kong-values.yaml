@@ -4,12 +4,15 @@ controller:
       tag: "3.2"
     env:
       feature_gates: "FillIDs=true"
+    ingressController:
+      enabled: false
+      ingressClass: "kong" # name of the ingress class
     konnect:
       license:
         enabled: true
       enabled: true
-      runtimeGroupID: "740a7df4-7acd-4deb-970e-4a934c239998" # deprecated
-      controlPlaneID: "740a7df4-7acd-4deb-970e-4a934c239998"
+      # runtimeGroupID: # deprecated
+      # controlPlaneID: # already set in the helmfile.yaml
       tlsClientCertSecretName: konnect-client-tls
       apiHostname: "eu.kic.api.konghq.com"
 
@@ -41,3 +44,8 @@ gateway:
     maxReplicas: 5
   secretVolumes:
     - konnect-client-tls
+  manager:
+    enabled: false # disable the manager UI
+  proxy:
+    annotations: # use a private Azure load balancer
+      service.beta.kubernetes.io/azure-load-balancer-internal: "true"
