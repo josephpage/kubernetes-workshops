@@ -11,9 +11,13 @@ releases:
     createNamespace: true
     chart: ./charts/kong-certificates/
     version: 0.1.0
-    values:
-      - kong-certificates-values.yaml
+    set:
+      - name: konnect_cluster_certificate
+        value: {{ requiredEnv "KONG_KONNECT_CLUSTER_CERTIFICATE" | quote}}
+      - name: konnect_certificate_key
+        value: {{ requiredEnv "KONG_KONNECT_CERTIFICATE_KEY" | quote }}
     wait: true
+
   - name: gateway
     namespace: kong-gateway
     createNamespace: true
@@ -24,6 +28,7 @@ releases:
     needs:
       - kong-gateway/kong-certificates
     wait: true
+
   - name: echo-server
     namespace: echo-server
     createNamespace: true

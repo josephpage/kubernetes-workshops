@@ -20,22 +20,22 @@ locals {
   }
 
   nodes = var.use_arm64_nodes ? {
-    "worker-x86" = {
-      name                  = "x86${substr(random_id.prefix.hex, 0, 5)}"
-      vm_size               = "Standard_D2s_v5"
-      node_count            = 3
-      vnet_subnet_id        = azurerm_subnet.test.id
-      create_before_destroy = true
-      zones = data.azurerm_location.default.zone_mappings[*].logical_zone
-    }
-  } : {
     "worker-arm" = {
       name                  = "arm${substr(random_id.prefix.hex, 0, 5)}"
       vm_size               = "Standard_D2ps_v5"
       node_count            = 3
       vnet_subnet_id        = azurerm_subnet.test.id
       create_before_destroy = false
-      zones = data.azurerm_location.default.zone_mappings[*].logical_zone
+      zones                 = data.azurerm_location.default.zone_mappings[*].logical_zone
+    }
+    } : {
+    "worker-x86" = {
+      name                  = "x86${substr(random_id.prefix.hex, 0, 5)}"
+      vm_size               = "Standard_D2s_v5"
+      node_count            = 3
+      vnet_subnet_id        = azurerm_subnet.test.id
+      create_before_destroy = true
+      zones                 = data.azurerm_location.default.zone_mappings[*].logical_zone
     }
   }
 }
@@ -52,7 +52,7 @@ module "aks" {
   vnet_subnet_id      = azurerm_subnet.test.id
 
   agents_availability_zones = data.azurerm_location.default.zone_mappings[*].logical_zone
-  node_pools          = local.nodes
+  node_pools                = local.nodes
 
   kubernetes_version = "1.30"
 
@@ -80,7 +80,7 @@ module "grafana" {
 }
 
 module "kubeseal" {
-  source           = "../modules/kubeseal"
+  source = "../modules/kubeseal"
 
   depends_on = [module.aks]
 }

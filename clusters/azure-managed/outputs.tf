@@ -16,5 +16,5 @@ output "grafana_user" {
 output "grafana_password" {
   description = "Grafana password"
   value       = module.grafana.grafana_password
-  sensitive = true
+  sensitive   = true
 }
