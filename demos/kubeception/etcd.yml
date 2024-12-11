@@ -1,0 +1,105 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: etcd
+  name: etcd
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+  - name: etcd-client
+    port: 2379
+  - name: etcd-server
+    port: 2380
+  selector:
+    app: etcd
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: etcd
+  name: etcd-client
+spec:
+  ports:
+  - name: etcd-client
+    port: 2379
+  selector:
+    app: etcd
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: etcd
+  name: etcd
+spec:
+##
+  ## The service name is being set to leverage the service headlessly.
+  ## https://kubernetes.io/docs/concepts/services-networking/service/#headless-services
+  serviceName: etcd
+  ##
+  ## If you are increasing the replica count of an existing cluster, you should
+  ## also update the --initial-cluster-state flag as noted further down in the
+  ## container configuration.
+  replicas: 3
+  ##
+  ## For initialization, the etcd pods must be available to eachother before
+  ## they are "ready" for traffic. The "Parallel" policy makes this possible.
+  podManagementPolicy: Parallel
+  ##
+  ## To ensure availability of the etcd cluster, the rolling update strategy
+  ## is used. For availability, there must be at least 51% of the etcd nodes
+  ## online at any given time.
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  ##
+  ## This is label query over pods that should match the replica count.
+  ## It must match the pod template's labels. For more information, see the
+  ## following documentation:
+  ##   https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
+  selector:
+    matchLabels:
+      app: etcd
+  ##
+  ## Pod configuration template.
+  template:
+    metadata:
+      labels:
+        app: etcd
+        test: deploy
+    spec:
+      containers:
+      - image: quay.io/coreos/etcd:latest
+        name: etcd
+        env:
+          - name: HOSTNAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: SERVICE_NAME
+            value: etcd
+          - name: URI_SCHEME
+            value: http
+        command:
+          - /bin/sh
+          - -c
+          - |
+            exec /usr/local/bin/etcd \
+            --name $HOSTNAME \
+            --initial-advertise-peer-urls=$(URI_SCHEME)://$(HOSTNAME).$(SERVICE_NAME):2380 \
+            --listen-peer-urls $(URI_SCHEME)://0.0.0.0:2380 \
+            --listen-client-urls $(URI_SCHEME)://0.0.0.0:2379 \
+            --advertise-client-urls=$(URI_SCHEME)://$(HOSTNAME).$(SERVICE_NAME):2379 \
+            --initial-cluster=etcd-0=$(URI_SCHEME)://etcd-0.$(SERVICE_NAME):2380,etcd-1=$(URI_SCHEME)://etcd-1.$(SERVICE_NAME):2380,etcd-2=$(URI_SCHEME)://etcd-2.$(SERVICE_NAME):2380 \
+            --initial-cluster-state new
+        ports:
+          - name: etcd-client
+            containerPort: 2379
+            protocol: TCP
+          - name: etcd-server
+            containerPort: 2380
+            protocol: TCP
