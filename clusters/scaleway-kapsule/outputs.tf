@@ -15,6 +15,6 @@ output "grafana_url" {
 }
 
 output "grafana_admin_password" {
-  value     = random_password.grafana_password.result
+  value     = module.grafana.grafana_password
   sensitive = true
 }

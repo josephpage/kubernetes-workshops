@@ -15,12 +15,16 @@ variable "scaleway_zone" {
   default = "fr-par-2"
 }
 
+variable "cluster_name" {
+  default = "sandbox-cluster"
+}
+
 variable "scaleway_kapscule_cni" {
   default = "cilium"
 }
 
 variable "scaleway_kubernetes_version" {
-  default = "1.30"
+  default = "1.31"
 }
 
 variable "scaleway_kubernetes_pool_node_type" {

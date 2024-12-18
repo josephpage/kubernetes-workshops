@@ -1,6 +1,13 @@
 # Install Basic Cluster with Scaleway
 
-1. Configure your Scaleway credentials in the `.env` file
+1. Configure your Scaleway credentials in the `.env` file, for example:
+
+```bash
+SCW_ACCESS_KEY=**
+SCW_SECRET_KEY=**
+SCW_DEFAULT_PROJECT_ID=**
+SCW_DEFAULT_ORGANIZATION_ID=**
+```
 
 2. Create the cluster :
 

@@ -1,16 +1,30 @@
 resource "scaleway_k8s_cluster" "sandbox" {
-  name    = "sandbox-cluster"
+  name    = var.cluster_name
   type    = "kapsule"
   version = var.scaleway_kubernetes_version
   cni     = var.scaleway_kapscule_cni
 
   delete_additional_resources = true
 
+  private_network_id = scaleway_vpc_private_network.sandbox.id
+
   auto_upgrade {
     enable                        = true
     maintenance_window_start_hour = 1
     maintenance_window_day        = "any"
   }
+}
+
+resource "scaleway_vpc_private_network" "sandbox" {
+  name = var.cluster_name
+  ipv4_subnet {
+    subnet = "172.16.20.0/22"
+  }
+
+  ipv6_subnets {
+    subnet = "fd48:84f2:7301:6c38::/64"
+  }
+  tags = ["sandbox", "kubernetes-workshops"]
 }
 
 resource "scaleway_k8s_pool" "pool" {
@@ -92,10 +106,12 @@ resource "local_sensitive_file" "kubeconfig" {
 
 module "cert-manager" {
   source = "../modules/cert-manager"
-  email = "jopa@octo.com"
+  email  = "jopa@octo.com"
 }
 
 module "grafana" {
-  source = "../modules/prometheus-grafana"
+  source           = "../modules/prometheus-grafana"
   base_domain_name = local.ingress_domain_name
+
+  depends_on = [helm_release.nginx_ingress]
 }
