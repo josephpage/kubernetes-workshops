@@ -1,4 +1,4 @@
-# Install Basic Cluster with Scaleway
+# Install Basic Cluster with Scaleway and OpenTofu
 
 1. Configure your Scaleway credentials in the `.env` file, for example:
 
@@ -12,8 +12,8 @@ SCW_DEFAULT_ORGANIZATION_ID=**
 2. Create the cluster :
 
 ```bash
-env $(cat .env | sed 's/#.*//g'| xargs) terraform init
-env $(cat .env | sed 's/#.*//g'| xargs) terraform apply
+env $(cat .env | sed 's/#.*//g'| xargs) tofu init
+env $(cat .env | sed 's/#.*//g'| xargs) tofu apply
 ```
 
 3. Once the cluster is created, you can install the basic cluster with the following command:

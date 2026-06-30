@@ -1,4 +1,4 @@
 variable "base_domain_name" {
-    type    = string
-    nullable = false
+  type     = string
+  nullable = false
 }

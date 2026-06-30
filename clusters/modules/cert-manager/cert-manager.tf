@@ -11,33 +11,37 @@ resource "helm_release" "cert-manager" {
     {
       installCRDs = true
       ingressShim = {
-        defaultIssuerName: "letsencrypt-production"
-        defaultIssuerKind: "ClusterIssuer"
+        defaultIssuerName : var.default_issuer_name
+        defaultIssuerKind : "ClusterIssuer"
+      }
+      config = {
+        apiVersion       = "controller.config.cert-manager.io/v1alpha1"
+        kind             = "ControllerConfiguration"
+        enableGatewayAPI = true
       }
     }
   )]
 }
 
-resource "helm_release" "letsencrypt-issuer" {
-  for_each = toset(["production", "staging"])
+resource "helm_release" "letsencrypt-issuers" {
+  name      = "letsencrypt-issuers"
+  namespace = "cert-manager"
 
-  name             = "letsencrypt-clusterissuer-${each.key}"
-  namespace        = "cert-manager"
+  repository = "https://charts.somaz.blog"
+  chart      = "certmanager-letsencrypt"
+  version    = "0.2.2"
 
-  repository = "https://radar-base.github.io/radar-helm-charts"
-  chart      = "cert-manager-letsencrypt"
-
-  values = [yamlencode(
-    {
-      nameOverride = "letsencrypt-${each.key}"
-      fullnameOverride = "letsencrypt-${each.key}"
-      maintainerEmail = var.email
-      httpIssuer = {
-        environment = each.key
-        privateSecretRef = "clusterissuer-letsencrypt-${each.key}"
+  values = [yamlencode({
+    clusterIssuers = [
+      for issuer in var.cluster_issuers : {
+        name                = issuer.name
+        email               = coalesce(var.email, "noreply@example.com")
+        server              = issuer.server
+        privateKeySecretRef = coalesce(issuer.private_key_secret_ref, issuer.name)
+        solvers             = issuer.solvers
       }
-    }
-  )]
+    ]
+  })]
 
-  depends_on = [ helm_release.cert-manager ]
+  depends_on = [helm_release.cert-manager]
 }

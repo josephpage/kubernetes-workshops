@@ -1,0 +1,13 @@
+apiVersion: platform.octo.com/v1alpha1
+kind: NamespaceSecretRequest
+metadata:
+  name: secret-for-qa-env
+  namespace: default
+spec:
+  ticketRequestName: "request-new-env"
+  ticketRequestNamespace: "default"
+  secretName: "app-config"
+  stringData:
+    DATABASE_URL: "postgresql://app_user:REPLACE_ME@db-dev.internal:5432/production_db"
+    API_KEY: "REPLACE_ME_api_key_factice"
+    LOG_LEVEL: "debug"

@@ -1,0 +1,307 @@
+apiVersion: platform.kratix.io/v1alpha1
+kind: Promise
+metadata:
+  name: namespace-secret
+spec:
+  api:
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: namespacesecretrequests.platform.octo.com
+    spec:
+      group: platform.octo.com
+      versions:
+        - name: v1alpha1
+          served: true
+          storage: true
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  properties:
+                    ticketRequestName:
+                      type: string
+                      description: "Nom de la TicketRequest dont dépend cette demande (doit être approuvée)"
+                    ticketRequestNamespace:
+                      type: string
+                      default: default
+                      description: "Namespace de la TicketRequest référencée"
+                    secretName:
+                      type: string
+                      default: app-secret
+                      description: "Nom du Secret à créer dans le namespace cible"
+                    stringData:
+                      type: object
+                      additionalProperties:
+                        type: string
+                      description: "Paires clé/valeur du Secret (en clair, encodées par Kubernetes à la création)"
+                  required: [ticketRequestName, secretName, stringData]
+                status:
+                  type: object
+                  properties:
+                    status:
+                      type: string
+                      description: "Statut courant de la demande (Pending, Ready, Failed, WaitingDependency)"
+                    message:
+                      type: string
+                      description: "Message explicatif du statut courant"
+                    namespaceName:
+                      type: string
+                      description: "Nom du namespace cible (rempli quand la TicketRequest est approuvée)"
+                    secretName:
+                      type: string
+                      description: "Nom du Secret créé (rempli quand le Secret est généré)"
+          subresources:
+            status: {}
+          additionalPrinterColumns:
+            - name: TicketRequest
+              type: string
+              jsonPath: .spec.ticketRequestName
+            - name: Secret
+              type: string
+              jsonPath: .spec.secretName
+            - name: Namespace
+              type: string
+              jsonPath: .status.namespaceName
+            - name: Status
+              type: string
+              jsonPath: .status.status
+      names:
+        kind: NamespaceSecretRequest
+        plural: namespacesecretrequests
+        singular: namespacesecretrequest
+        shortNames: [nsr]
+      scope: Namespaced
+  workflows:
+    resource:
+      configure:
+        - apiVersion: platform.kratix.io/v1alpha1
+          kind: Pipeline
+          metadata:
+            name: configure
+          spec:
+            rbac:
+              permissions:
+                - apiGroups: ["platform.octo.com"]
+                  resources: ["ticketrequests"]
+                  verbs: ["get"]
+            containers:
+              - name: namespace-secret-agent
+                image: python:3.11-alpine
+                command: ["/bin/sh", "-c"]
+                args:
+                  - |
+                    pip install --quiet kratix-sdk
+                    python <<'PYTHON'
+                    import yaml
+                    import sys
+                    from datetime import timedelta
+                    from kratix_sdk import KratixSDK, Status
+                    from kubernetes import client, config
+                    from kubernetes.client import ApiException
+
+                    # Initialiser le SDK Kratix
+                    sdk = KratixSDK()
+
+                    # Lire la requête via le SDK
+                    resource = sdk.read_resource_input()
+                    res_name = resource.get_name()
+                    ticket_request_name = resource.get_value('spec.ticketRequestName')
+                    ticket_request_namespace = resource.get_value('spec.ticketRequestNamespace', default='default')
+                    secret_name = resource.get_value('spec.secretName', default='app-secret')
+                    string_data = resource.get_value('spec.stringData', default={})
+
+                    print(f"NamespaceSecretRequest '{res_name}' : dépend de TicketRequest '{ticket_request_name}'")
+
+                    # Interroger le statut de la TicketRequest référencée via l'API K8s
+                    config.load_incluster_config()
+                    api = client.CustomObjectsApi()
+
+                    try:
+                        ticket = api.get_namespaced_custom_object(
+                            group='platform.octo.com',
+                            version='v1alpha1',
+                            namespace=ticket_request_namespace,
+                            plural='ticketrequests',
+                            name=ticket_request_name
+                        )
+                    except ApiException as e:
+                        if e.status == 404:
+                            # La TicketRequest n'existe pas — retry gracieux sans échec
+                            msg = (f"TicketRequest '{ticket_request_name}' introuvable dans le namespace "
+                                   f"'{ticket_request_namespace}'. Vérifiez que la Promise 'ticketing-gating' "
+                                   f"est installée et qu'une TicketRequest avec ce nom existe.")
+                            print(f"⚠️  {msg}")
+                            status = Status()
+                            status.set('status', 'WaitingDependency')
+                            status.set('message', msg)
+                            sdk.write_status(status)
+                            sdk.write_retry_after(timedelta(seconds=60), message=msg)
+                            sys.exit(0)
+                        else:
+                            # Autre erreur API (RBAC, connexion, etc.) — retry aussi
+                            msg = f"Erreur API Kubernetes lors de la lecture de la TicketRequest : {e.reason}"
+                            print(f"⚠️  {msg}")
+                            status = Status()
+                            status.set('status', 'WaitingDependency')
+                            status.set('message', msg)
+                            sdk.write_status(status)
+                            sdk.write_retry_after(timedelta(seconds=60), message=msg)
+                            sys.exit(0)
+                    except Exception as e:
+                        # Erreur inattendue — retry gracieux
+                        msg = f"Erreur inattendue lors de la lecture de la TicketRequest : {e}"
+                        print(f"⚠️  {msg}")
+                        status = Status()
+                        status.set('status', 'WaitingDependency')
+                        status.set('message', msg)
+                        sdk.write_status(status)
+                        sdk.write_retry_after(timedelta(seconds=60), message=msg)
+                        sys.exit(0)
+
+                    ticket_status = ticket.get('status', {})
+                    ticket_state = ticket_status.get('status', 'Unknown')
+                    namespace_name = ticket_status.get('namespaceName', '')
+
+                    print(f"TicketRequest '{ticket_request_name}' : statut={ticket_state}, namespace={namespace_name}")
+
+                    if ticket_state == 'Approved' and namespace_name:
+                        # La TicketRequest est approuvée : générer le Secret dans le namespace
+                        secret_manifest = {
+                            'apiVersion': 'v1',
+                            'kind': 'Secret',
+                            'metadata': {
+                                'name': secret_name,
+                                'namespace': namespace_name,
+                                'labels': {
+                                    'kratix-secret-request': res_name
+                                }
+                            },
+                            'type': 'Opaque',
+                            'stringData': string_data
+                        }
+                        manifest_bytes = yaml.dump(secret_manifest, default_flow_style=False, sort_keys=False).encode('utf-8')
+                        sdk.write_output('secret.yaml', manifest_bytes)
+
+                        status = Status()
+                        status.set('status', 'Ready')
+                        status.set('namespaceName', namespace_name)
+                        status.set('secretName', secret_name)
+                        status.set('message', f"Secret '{secret_name}' créé dans le namespace '{namespace_name}'.")
+                        sdk.write_status(status)
+                        print(f"✅ Secret '{secret_name}' généré dans /kratix/output/secret.yaml pour le namespace '{namespace_name}'.")
+
+                    elif ticket_state == 'Pending':
+                        # Pattern async natif Kratix : utiliser write_retry_after du SDK
+                        msg = f"En attente de l'approbation de la TicketRequest '{ticket_request_name}'."
+                        print(f"⏳ {msg}")
+                        sdk.write_retry_after(timedelta(seconds=30), message=msg)
+
+                        status = Status()
+                        status.set('status', 'Pending')
+                        status.set('message', msg)
+                        sdk.write_status(status)
+                        sys.exit(0)
+
+                    elif ticket_state == 'Failed':
+                        # La TicketRequest a échoué — retry moins fréquent
+                        msg = (f"La TicketRequest '{ticket_request_name}' a le statut 'Failed'. "
+                               f"Le secret ne sera pas créé tant que le ticket n'est pas résolu.")
+                        print(f"❌ {msg}")
+                        status = Status()
+                        status.set('status', 'WaitingDependency')
+                        status.set('message', msg)
+                        sdk.write_status(status)
+                        sdk.write_retry_after(timedelta(seconds=120), message=msg)
+                        sys.exit(0)
+
+                    else:
+                        # Statut inconnu — retry pour laisser la chance à la reconciliation
+                        msg = (f"La TicketRequest '{ticket_request_name}' a un statut inconnu '{ticket_state}'. "
+                               f"Nouvelle tentative dans 60s.")
+                        print(f"❓ {msg}")
+                        status = Status()
+                        status.set('status', 'WaitingDependency')
+                        status.set('message', msg)
+                        sdk.write_status(status)
+                        sdk.write_retry_after(timedelta(seconds=60), message=msg)
+                        sys.exit(0)
+                    PYTHON
+      delete:
+        - apiVersion: platform.kratix.io/v1alpha1
+          kind: Pipeline
+          metadata:
+            name: delete
+          spec:
+            rbac:
+              permissions:
+                - apiGroups: ["platform.octo.com"]
+                  resources: ["ticketrequests"]
+                  verbs: ["get"]
+            containers:
+              - name: namespace-secret-cleanup
+                image: python:3.11-alpine
+                command: ["/bin/sh", "-c"]
+                args:
+                  - |
+                    pip install --quiet kratix-sdk
+                    python <<'PYTHON'
+                    import yaml
+                    import sys
+                    from kratix_sdk import KratixSDK
+                    from kubernetes import client, config
+                    from kubernetes.client import ApiException
+
+                    sdk = KratixSDK()
+                    resource = sdk.read_resource_input()
+
+                    secret_name = resource.get_value('spec.secretName', default='app-secret')
+                    namespace_name = resource.get_value('status.namespaceName', default='')
+
+                    # Si le namespace n'est pas dans le statut, essayer de le récupérer depuis la TicketRequest
+                    if not namespace_name:
+                        ticket_request_name = resource.get_value('spec.ticketRequestName')
+                        ticket_request_namespace = resource.get_value('spec.ticketRequestNamespace', default='default')
+                        config.load_incluster_config()
+                        api = client.CustomObjectsApi()
+                        try:
+                            ticket = api.get_namespaced_custom_object(
+                                group='platform.octo.com',
+                                version='v1alpha1',
+                                namespace=ticket_request_namespace,
+                                plural='ticketrequests',
+                                name=ticket_request_name
+                            )
+                            namespace_name = ticket.get('status', {}).get('namespaceName', '')
+                        except ApiException as e:
+                            if e.status == 404:
+                                print(f"TicketRequest '{ticket_request_name}' introuvable — "
+                                      f"le namespace ne peut pas être déterminé. "
+                                      f"Aucun manifest de suppression généré (le Secret sera nettoyé "
+                                      f"avec le namespace s'il est supprimé).")
+                            else:
+                                print(f"Erreur API Kubernetes ({e.reason}) — "
+                                      f"le namespace ne peut pas être déterminé. "
+                                      f"Aucun manifest de suppression généré.")
+                        except Exception:
+                            print("Erreur inattendue — aucun manifest de suppression généré.")
+
+                    print(f"Nettoyage du Secret '{secret_name}' dans le namespace '{namespace_name}'...")
+
+                    if namespace_name:
+                        secret_manifest = {
+                            'apiVersion': 'v1',
+                            'kind': 'Secret',
+                            'metadata': {
+                                'name': secret_name,
+                                'namespace': namespace_name
+                            }
+                        }
+                        manifest_bytes = yaml.dump(secret_manifest, default_flow_style=False, sort_keys=False).encode('utf-8')
+                        sdk.write_output('secret.yaml', manifest_bytes)
+                        print("Manifest de suppression généré.")
+                    else:
+                        print("Impossible de déterminer le namespace. Aucun manifest de suppression généré.")
+                    PYTHON

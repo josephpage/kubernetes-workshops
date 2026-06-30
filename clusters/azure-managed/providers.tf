@@ -23,7 +23,7 @@ provider "azurerm" {
 provider "random" {}
 
 provider "helm" {
-  kubernetes {
+  kubernetes = {
     host                   = yamldecode(module.aks.kube_config_raw).clusters[0].cluster.server
     token                  = yamldecode(module.aks.kube_config_raw).users[0].user.token
     client_certificate     = base64decode(yamldecode(module.aks.kube_config_raw).users[0].user["client-certificate-data"])

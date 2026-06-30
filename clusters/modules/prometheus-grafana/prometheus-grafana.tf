@@ -1,7 +1,7 @@
 locals {
-  grafana_user = "admin"
+  grafana_user     = "admin"
   grafana_password = sensitive(random_password.grafana_password.result)
-  grafana_host = "grafana.${var.base_domain_name}"
+  grafana_host     = "grafana.${var.base_domain_name}"
 }
 
 # install prometheus+grafana with helm
@@ -12,6 +12,7 @@ resource "helm_release" "prometheus" {
 
   repository = "https://prometheus-community.github.io/helm-charts"
   chart      = "kube-prometheus-stack"
+  version    = "87.10.1"
 
   values = [yamlencode(
     {
@@ -45,32 +46,35 @@ resource "helm_release" "prometheus" {
         },
         "adminUser" : local.grafana_user,
         "ingress" : {
-          "enabled" : true,
-          "annotations" : {
-            "kubernetes.io/ingress.class" : "nginx",
-            "cert-manager.io/cluster-issuer" : "letsencrypt-production",
+          "enabled" : false,
+        },
+        "route" : {
+          "main" : {
+            "enabled" : true,
+            "parentRefs" : [
+              {
+                "name" : "traefik-gateway",
+                "namespace" : "traefik",
+              }
+            ],
+            "hostnames" : [
+              local.grafana_host,
+            ],
           },
-          "hosts" : [
-            local.grafana_host,
-          ],
-          "tls" : [
-            {
-              "secretName" : "grafana-tls",
-              "hosts" : [
-                local.grafana_host
-              ]
-            }
-          ]
         },
       }
     })
   ]
 
+
+
   # Below are the sensitive values that we don't want to be stored in the state file
-  set {
-    name  = "grafana.adminPassword"
-    value = local.grafana_password
-  }
+  set = [
+    {
+      name  = "grafana.adminPassword"
+      value = local.grafana_password
+    }
+  ]
 }
 
 # random password for grafana

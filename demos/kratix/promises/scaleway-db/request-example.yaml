@@ -1,0 +1,18 @@
+apiVersion: scaleway.octo.com/v1alpha1
+kind: PostgresSQLInstance
+metadata:
+  name: pg-instance-demo
+  namespace: default
+spec:
+  size: db-dev
+  postgres_version: "15"
+  db_name: "production_db"
+  db_user: "app_user"
+  # (Optionnel) Pour utiliser des secrets personnalisés au lieu du secret par défaut "database-passwords"
+  # adminPasswordSecretRef:
+  #   name: mon-secret-perso
+  #   key: mot-de-passe-admin
+  # userPasswordSecretRef:
+  #   name: mon-secret-perso
+  #   key: mot-de-passe-user
+

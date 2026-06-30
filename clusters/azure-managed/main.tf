@@ -62,10 +62,43 @@ module "aks" {
 
 module "cert-manager" {
   source = "../modules/cert-manager"
-  email  = "jopa@octo.com"
+
+  default_issuer_name = "letsencrypt-production"
+
+  cluster_issuers = [
+    {
+      name                   = "letsencrypt-production"
+      server                 = "https://acme-v02.api.letsencrypt.org/directory"
+      private_key_secret_ref = "letsencrypt-production"
+      solvers = [
+        {
+          http01 = {
+            ingress = {
+              ingressClassName = "nginx"
+            }
+          }
+        }
+      ]
+    },
+    {
+      name                   = "letsencrypt-staging"
+      server                 = "https://acme-staging-v02.api.letsencrypt.org/directory"
+      private_key_secret_ref = "letsencrypt-staging"
+      solvers = [
+        {
+          http01 = {
+            ingress = {
+              ingressClassName = "nginx"
+            }
+          }
+        }
+      ]
+    }
+  ]
 
   depends_on = [
-    module.aks
+    module.aks,
+    helm_release.nginx_ingress
   ]
 }
 

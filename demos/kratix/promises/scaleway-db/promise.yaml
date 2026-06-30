@@ -1,0 +1,270 @@
+apiVersion: platform.kratix.io/v1alpha1
+kind: Promise
+metadata:
+  name: scaleway-db
+spec:
+  api:
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: postgressqlinstances.scaleway.octo.com
+    spec:
+      group: scaleway.octo.com
+      versions:
+        - name: v1alpha1
+          served: true
+          storage: true
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  properties:
+                    size:
+                      type: string
+                      enum: [db-dev, db-prod]
+                      default: db-dev
+                    postgres_version:
+                      type: string
+                      default: "15"
+                    db_name:
+                      type: string
+                      default: "production_db"
+                    db_user:
+                      type: string
+                      default: "app_user"
+                    adminPasswordSecretRef:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        key:
+                          type: string
+                      required: [name, key]
+                    userPasswordSecretRef:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        key:
+                          type: string
+                      required: [name, key]
+                  required: [size]
+          additionalPrinterColumns:
+            - name: Size
+              type: string
+              jsonPath: .spec.size
+            - name: Postgres Version
+              type: string
+              jsonPath: .spec.postgres_version
+            - name: Database Name
+              type: string
+              jsonPath: .spec.db_name
+      names:
+        kind: PostgresSQLInstance
+        plural: postgressqlinstances
+        singular: postgressqlinstance
+        shortNames: [pgdb]
+      scope: Namespaced
+  workflows:
+    resource:
+      configure:
+        - apiVersion: platform.kratix.io/v1alpha1
+          kind: Pipeline
+          metadata:
+            name: configure
+          spec:
+            rbac:
+              permissions:
+                - apiGroups: [""]
+                  resources: ["secrets"]
+                  verbs: ["get"]
+            containers:
+              - name: crossplane-db-generator
+                image: alpine/k8s:1.30.2
+                command: ["/bin/sh", "-c"]
+                args:
+                  - |
+                    echo "Lecture de la requête de base de données..."
+                    SIZE=$(yq eval '.spec.size' /kratix/input/object.yaml)
+                    VERSION=$(yq eval '.spec.postgres_version' /kratix/input/object.yaml)
+                    NAME=$(yq eval '.metadata.name' /kratix/input/object.yaml)
+                    DB_NAME=$(yq eval '.spec.db_name' /kratix/input/object.yaml)
+                    DB_USER=$(yq eval '.spec.db_user' /kratix/input/object.yaml)
+                    NAMESPACE=$(yq eval '.metadata.namespace // "default"' /kratix/input/object.yaml)
+
+                    # Lecture des références de secrets avec repli sur les valeurs par défaut
+                    ADMIN_SECRET_NAME=$(yq eval '.spec.adminPasswordSecretRef.name // "database-passwords"' /kratix/input/object.yaml)
+                    ADMIN_SECRET_KEY=$(yq eval '.spec.adminPasswordSecretRef.key // "admin-password"' /kratix/input/object.yaml)
+                    USER_SECRET_NAME=$(yq eval '.spec.userPasswordSecretRef.name // "database-passwords"' /kratix/input/object.yaml)
+                    USER_SECRET_KEY=$(yq eval '.spec.userPasswordSecretRef.key // "user-password"' /kratix/input/object.yaml)
+
+                    echo "Récupération des mots de passe depuis les secrets..."
+                    ADMIN_PASSWORD=$(kubectl get secret "${ADMIN_SECRET_NAME}" -n "${NAMESPACE}" -o jsonpath="{.data.${ADMIN_SECRET_KEY}}" | base64 -d)
+                    USER_PASSWORD=$(kubectl get secret "${USER_SECRET_NAME}" -n "${NAMESPACE}" -o jsonpath="{.data.${USER_SECRET_KEY}}" | base64 -d)
+
+                    if [ -z "${ADMIN_PASSWORD}" ] || [ -z "${USER_PASSWORD}" ]; then
+                      echo "Erreur: Impossible de récupérer les mots de passe depuis les secrets spécifiés."
+                      exit 1
+                    fi
+
+                    # Mappage de la taille
+                    if [ "$SIZE" = "db-prod" ]; then
+                      NODE_TYPE="db-prod-m"
+                    else
+                      NODE_TYPE="db-dev-s"
+                    fi
+
+                    # Création du dossier d'output requis par Kratix
+                    mkdir -p /kratix/output
+
+                    # Génération des manifests de la ressource Crossplane (Instance, Database, User, Privilege et Secrets de BDD)
+                    cat <<EOF > /kratix/output/database.yaml
+                    apiVersion: v1
+                    kind: Secret
+                    metadata:
+                      name: pg-admin-password-${NAME}
+                      namespace: crossplane-system
+                    type: Opaque
+                    stringData:
+                      password: "${ADMIN_PASSWORD}"
+                    ---
+                    apiVersion: v1
+                    kind: Secret
+                    metadata:
+                      name: pg-user-password-${NAME}
+                      namespace: crossplane-system
+                    type: Opaque
+                    stringData:
+                      password: "${USER_PASSWORD}"
+                    ---
+                    apiVersion: rdb.scaleway.upbound.io/v1alpha1
+                    kind: Instance
+                    metadata:
+                      name: ${NAME}
+                    spec:
+                      forProvider:
+                        name: "${NAME}-cluster"
+                        engine: "PostgreSQL-${VERSION}"
+                        nodeType: "${NODE_TYPE}"
+                        isHaCluster: false
+                        region: "fr-par"
+                        disableBackup: true
+                        userName: "scaleway_admin"
+                        passwordSecretRef:
+                          name: pg-admin-password-${NAME}
+                          namespace: crossplane-system
+                          key: password
+                      writeConnectionSecretToRef:
+                        name: pg-instance-conn-${NAME}
+                        namespace: crossplane-system
+                    ---
+                    apiVersion: rdb.scaleway.upbound.io/v1alpha1
+                    kind: Database
+                    metadata:
+                      name: ${NAME}-db
+                    spec:
+                      forProvider:
+                        name: "${DB_NAME}"
+                        instanceIdRef:
+                          name: ${NAME}
+                    ---
+                    apiVersion: rdb.scaleway.upbound.io/v1alpha1
+                    kind: User
+                    metadata:
+                      name: ${NAME}-user
+                    spec:
+                      forProvider:
+                        name: "${DB_USER}"
+                        instanceIdRef:
+                          name: ${NAME}
+                        passwordSecretRef:
+                          name: pg-user-password-${NAME}
+                          namespace: crossplane-system
+                          key: password
+                        isAdmin: false
+                    ---
+                    apiVersion: rdb.scaleway.upbound.io/v1alpha1
+                    kind: Privilege
+                    metadata:
+                      name: ${NAME}-privilege
+                    spec:
+                      forProvider:
+                        instanceIdRef:
+                          name: ${NAME}
+                        databaseName: "${DB_NAME}"
+                        userName: "${DB_USER}"
+                        permission: "readwrite"
+                    EOF
+                    echo "Manifests Crossplane générés dans /kratix/output/database.yaml !"
+      delete:
+        - apiVersion: platform.kratix.io/v1alpha1
+          kind: Pipeline
+          metadata:
+            name: delete
+          spec:
+            containers:
+              - name: crossplane-db-cleaner
+                image: alpine/k8s:1.30.2
+                command: ["/bin/sh", "-c"]
+                args:
+                  - |
+                    echo "Nettoyage des ressources Crossplane générées..."
+                    NAME=$(yq eval '.metadata.name' /kratix/input/object.yaml)
+                    
+                    echo "Suppression des ressources Crossplane pour l'instance ${NAME}..."
+                    
+                    # Générer un manifeste vide pour notifier FluxCD de supprimer les ressources.
+                    # Quand Kratix exécute le workflow delete, il envoie les manifests générés au StateStore.
+                    # Si le fichier est vide, FluxCD supprimera les ressources existantes (reconciliation par absence).
+                    mkdir -p /kratix/output
+                    
+                    # Générer les manifests de suppression avec deletionPolicy: Delete
+                    # pour que Crossplane supprime aussi la ressource réelle chez Scaleway.
+                    # Cela démontre le cycle de vie complet en mode pédagogique.
+                    cat <<EOF > /kratix/output/database.yaml
+                    apiVersion: rdb.scaleway.upbound.io/v1alpha1
+                    kind: Privilege
+                    metadata:
+                     name: ${NAME}-privilege
+                    spec:
+                     deletionPolicy: Delete
+                    ---
+                    apiVersion: rdb.scaleway.upbound.io/v1alpha1
+                    kind: User
+                    metadata:
+                     name: ${NAME}-user
+                    spec:
+                     deletionPolicy: Delete
+                    ---
+                    apiVersion: rdb.scaleway.upbound.io/v1alpha1
+                    kind: Database
+                    metadata:
+                     name: ${NAME}-db
+                    spec:
+                     deletionPolicy: Delete
+                    ---
+                    apiVersion: rdb.scaleway.upbound.io/v1alpha1
+                    kind: Instance
+                    metadata:
+                     name: ${NAME}
+                    spec:
+                     deletionPolicy: Delete
+                    ---
+                    apiVersion: v1
+                    kind: Secret
+                    metadata:
+                     name: pg-admin-password-${NAME}
+                     namespace: crossplane-system
+                    ---
+                    apiVersion: v1
+                    kind: Secret
+                    metadata:
+                     name: pg-user-password-${NAME}
+                     namespace: crossplane-system
+                    EOF
+                    
+                    echo "Manifests de suppression générés (deletionPolicy: Delete)."
+                    echo "L'instance Scaleway et toutes ses ressources associées seront supprimées."
+

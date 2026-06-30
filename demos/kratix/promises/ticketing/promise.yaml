@@ -1,0 +1,271 @@
+apiVersion: platform.kratix.io/v1alpha1
+kind: Promise
+metadata:
+  name: ticketing-gating
+spec:
+  api:
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: ticketrequests.platform.octo.com
+    spec:
+      group: platform.octo.com
+      versions:
+        - name: v1alpha1
+          served: true
+          storage: true
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  properties:
+                    title:
+                      type: string
+                    description:
+                      type: string
+                    requester:
+                      type: string
+                    severity:
+                      type: string
+                      enum: [low, medium, high]
+                      default: medium
+                  required: [title, description, requester]
+          additionalPrinterColumns:
+            - name: Requester
+              type: string
+              jsonPath: .spec.requester
+            - name: Severity
+              type: string
+              jsonPath: .spec.severity
+            - name: Ticket ID
+              type: string
+              jsonPath: .status.ticketId
+            - name: Status
+              type: string
+              jsonPath: .status.status
+      names:
+        kind: TicketRequest
+        plural: ticketrequests
+        singular: ticketrequest
+        shortNames: [tr]
+      scope: Namespaced
+  workflows:
+    resource:
+      configure:
+        - apiVersion: platform.kratix.io/v1alpha1
+          kind: Pipeline
+          metadata:
+            name: configure
+          spec:
+            containers:
+              - name: ticket-gating-agent
+                image: python:3.11-alpine
+                command: ["python", "-c"]
+                args:
+                  - |
+                    import urllib.request
+                    import json
+                    import sys
+                    import time
+                    import os
+                    import textwrap
+
+                    input_file = '/kratix/input/object.yaml'
+                    if not os.path.exists(input_file):
+                        print("Erreur : Fichier d'entrée /kratix/input/object.yaml manquant.")
+                        sys.exit(1)
+
+                    raw_lines = open(input_file).read().splitlines()
+
+                    # Extraction rudimentaire de valeurs YAML de premier niveau pour éviter les dépendances
+                    def get_val(key):
+                        for l in raw_lines:
+                            l_strip = l.strip()
+                            if l_strip.startswith(key + ':'):
+                                return l_strip.split(':', 1)[1].strip().strip('"').strip("'")
+                        return None
+
+                    title = get_val('title')
+                    description = get_val('description')
+                    requester = get_val('requester')
+                    severity = get_val('severity') or 'medium'
+                    res_name = get_val('name') # Nom de la ressource TicketRequest
+
+                    print(f"Demande de ticket détectée : '{title}' pour la ressource {res_name}")
+
+                    # Recherche du ticketId actuel dans l'input (pour savoir s'il a déjà été créé)
+                    ticket_id = get_val('ticketId')
+                    api_url = "http://ticketing-service.ticketing-system.svc.cluster.local"
+
+                    if not ticket_id:
+                       # 1. Étape 1 : Création du ticket
+                       print("Création du ticket d'approbation d'infrastructure...")
+                       payload = json.dumps({
+                           "title": f"[{res_name}] {title}",
+                           "description": description,
+                           "requester": requester,
+                           "service": "kratix-namespace-provisioning",
+                           "severity": severity
+                       }).encode('utf-8')
+                        
+                       req = urllib.request.Request(
+                           f"{api_url}/tickets",
+                           data=payload,
+                           headers={'Content-Type': 'application/json'}
+                       )
+                       try:
+                           with urllib.request.urlopen(req) as response:
+                               res_data = json.loads(response.read().decode('utf-8'))
+                               ticket_id = res_data['ticket_id']
+                               print(f"Ticket créé avec l'ID : {ticket_id}")
+                       except Exception as e:
+                           print(f"Impossible de joindre le service de ticketing : {e}")
+                           sys.exit(1)
+
+                       # Écrire le statut initial (Pending) dans les métadonnées de retour de Kratix
+                       os.makedirs('/kratix/metadata', exist_ok=True)
+                       with open('/kratix/metadata/status.yaml', 'w') as f:
+                           f.write("status: Pending\n")
+                           f.write(f"ticketId: {ticket_id}\n")
+                           f.write(f"message: Ticket {ticket_id} cree. En attente de validation sur http://localhost:30080\n")
+
+                    else:
+                       print(f"Reprise du suivi pour le ticket existant {ticket_id}...")
+
+                    # 2. Étape 2 : Boucle d'attente (Polling) de l'approbation
+                    timeout = 180 # 3 minutes pour l'atelier
+                    start_time = time.time()
+                    approved = False
+                    output_data = {}
+                    approved_by = "unknown"
+                    resolved_at = "unknown"
+
+                    print(f"En attente d'approbation manuelle du ticket {ticket_id} (Timeout: {timeout}s)...")
+                    while time.time() - start_time < timeout:
+                       try:
+                           req = urllib.request.Request(f"{api_url}/tickets/{ticket_id}")
+                           with urllib.request.urlopen(req) as response:
+                               t_data = json.loads(response.read().decode('utf-8'))
+                               if t_data.get('status') == 'Approved':
+                                   approved = True
+                                   output_data = t_data.get('output_data', {})
+                                   approved_by = t_data.get('approved_by', 'admin')
+                                   resolved_at = t_data.get('resolved_at', 'maintenant')
+                                   break
+                               else:
+                                   print(f"Ticket {ticket_id} toujours en attente d'approbation...")
+                       except Exception as e:
+                           print(f"Erreur d'appel API: {e}")
+                       time.sleep(5)
+
+                    if not approved:
+                       print("Erreur : Le ticket n'a pas été approuvé dans le temps imparti.")
+                       os.makedirs('/kratix/metadata', exist_ok=True)
+                       with open('/kratix/metadata/status.yaml', 'w') as f:
+                           f.write("status: Failed\n")
+                           f.write(f"ticketId: {ticket_id}\n")
+                           f.write("message: Le delai d'approbation manuelle (3 minutes) a expire.\n")
+                       sys.exit(1)
+
+                    # 3. Étape 3 : Récupération des données saisies et génération des ressources
+                    ns_name = output_data.get('namespace_name', f"ns-{requester}-{ticket_id.lower()}")
+                    cpu_limit = output_data.get('cpu_limit', '1')
+                    memory_limit = output_data.get('memory_limit', '2Gi')
+
+                    print(f"Ticket approuvé ! Configuration de réalisation : Namespace={ns_name}, CPU={cpu_limit}, RAM={memory_limit}")
+
+                    # Mise à jour du statut final dans Kratix
+                    os.makedirs('/kratix/metadata', exist_ok=True)
+                    with open('/kratix/metadata/status.yaml', 'w') as f:
+                       f.write("status: Approved\n")
+                       f.write(f"ticketId: {ticket_id}\n")
+                       f.write(f"approvedBy: {approved_by}\n")
+                       f.write(f"resolvedAt: {resolved_at}\n")
+                       f.write(f"namespaceName: {ns_name}\n")
+                       f.write(f"cpuLimit: {cpu_limit}\n")
+                       f.write(f"memoryLimit: {memory_limit}\n")
+                       f.write(f"message: Ticket valide par {approved_by}. Espace de travail provisionne.\n")
+
+                    # Génération des manifests d'output destinés au cluster Worker
+                    import textwrap
+                    os.makedirs('/kratix/output', exist_ok=True)
+                    
+                    manifests = f"""
+                    apiVersion: v1
+                    kind: Namespace
+                    metadata:
+                      name: {ns_name}
+                      labels:
+                        kratix-ticket-id: {ticket_id}
+                        kratix-request-name: {res_name}
+                    ---
+                    apiVersion: v1
+                    kind: ResourceQuota
+                    metadata:
+                      name: platform-quota
+                      namespace: {ns_name}
+                    spec:
+                      hard:
+                        limits.cpu: "{cpu_limit}"
+                        limits.memory: "{memory_limit}"
+                    """
+                    
+                    # Dédenter et nettoyer les espaces vides
+                    cleaned_manifests = textwrap.dedent(manifests).strip()
+
+                    with open('/kratix/output/workspace.yaml', 'w') as f:
+                       f.write(cleaned_manifests)
+
+                    print(f"Ressources de réalisation (Namespace et Quotas) écrites avec succès dans /kratix/output/workspace.yaml !")
+      delete:
+        - apiVersion: platform.kratix.io/v1alpha1
+          kind: Pipeline
+          metadata:
+            name: delete
+          spec:
+            containers:
+              - name: ticket-cleanup-agent
+                image: python:3.11-alpine
+                command: ["python", "-c"]
+                args:
+                  - |
+                    import os
+
+                    input_file = '/kratix/input/object.yaml'
+                    raw_lines = open(input_file).read().splitlines()
+
+                    # Extraction de valeurs du YAML de l'input
+                    def get_val(key):
+                        for l in raw_lines:
+                            l_strip = l.strip()
+                            if l_strip.startswith(key + ':'):
+                                return l_strip.split(':', 1)[1].strip().strip('"').strip("'")
+                        return None
+
+                    res_name = get_val('name')
+                    ns_name = get_val('namespaceName') or f"ns-{get_val('requester')}"
+
+                    print(f"Nettoyage des ressources pour la requête {res_name}...")
+                    print(f"Suppression du namespace {ns_name} et de son ResourceQuota...")
+
+                    # Générer les manifests de suppression
+                    import textwrap
+                    os.makedirs('/kratix/output', exist_ok=True)
+                    
+                    manifests = f"""
+                    apiVersion: v1
+                    kind: Namespace
+                    metadata:
+                      name: {ns_name}
+                    """
+                    
+                    # Dédenter et nettoyer les espaces vides
+                    cleaned_manifests = textwrap.dedent(manifests).strip()
+
+                    with open('/kratix/output/workspace.yaml', 'w') as f:
+                        f.write(cleaned_manifests)
+
+                    print(f"Manifests de suppression générés.")
+                    print(f"Le namespace {ns_name} et son ResourceQuota seront supprimés sur le cluster Worker.")
