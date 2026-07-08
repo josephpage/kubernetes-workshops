@@ -29,13 +29,12 @@ resource "helm_release" "letsencrypt-issuers" {
 
   repository = "https://charts.somaz.blog"
   chart      = "certmanager-letsencrypt"
-  version    = "0.2.2"
+  version    = "0.2.4"
 
   values = [yamlencode({
     clusterIssuers = [
       for issuer in var.cluster_issuers : {
         name                = issuer.name
-        email               = coalesce(var.email, "noreply@example.com")
         server              = issuer.server
         privateKeySecretRef = coalesce(issuer.private_key_secret_ref, issuer.name)
         solvers             = issuer.solvers

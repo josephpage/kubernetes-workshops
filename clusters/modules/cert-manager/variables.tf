@@ -1,10 +1,3 @@
-variable "email" {
-  type        = string
-  nullable    = true
-  default     = null
-  description = "Optional email address to use for Let's Encrypt certificate. If not provided, a placeholder address is passed to the certmanager-letsencrypt chart."
-}
-
 variable "cluster_issuers" {
   type = list(object({
     name                   = string
