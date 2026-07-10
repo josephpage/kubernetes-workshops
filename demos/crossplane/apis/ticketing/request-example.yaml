@@ -1,0 +1,9 @@
+apiVersion: platform.octo.com/v1alpha1
+kind: TicketRequest
+metadata:
+  name: request-new-env
+spec:
+  title: "Demande de Namespace de Recette"
+  description: "Merci de provisionner un namespace pour l'équipe QA avec des quotas adaptés à des tests de charge légers."
+  requester: "equipe-qa"
+  severity: "high"

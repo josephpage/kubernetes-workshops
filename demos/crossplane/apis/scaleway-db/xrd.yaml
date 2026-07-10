@@ -1,0 +1,75 @@
+# Équivalent Crossplane de la section `spec.api` de la Promise Kratix scaleway-db :
+# la XRD génère la CRD PostgresSQLInstance, exactement comme la Promise le faisait.
+#
+# Différences notables :
+# - scope: Cluster (une XR cluster-scoped peut composer des ressources cluster-scoped,
+#   ce que sont les Managed Resources du provider Scaleway) ;
+# - les refs de secrets gagnent un champ `namespace` (la XR n'étant plus namespacée,
+#   il faut dire où lire le Secret) et leurs défauts sont portés par le schéma OpenAPI
+#   (dans la Promise, ces défauts étaient enfouis dans le script shell du pipeline).
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: postgressqlinstances.scaleway.octo.com
+spec:
+  scope: Cluster
+  group: scaleway.octo.com
+  names:
+    kind: PostgresSQLInstance
+    plural: postgressqlinstances
+    singular: postgressqlinstance
+    shortNames: [pgdb]
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                size:
+                  type: string
+                  enum: [db-dev, db-prod]
+                  default: db-dev
+                postgres_version:
+                  type: string
+                  default: "15"
+                db_name:
+                  type: string
+                  default: "production_db"
+                db_user:
+                  type: string
+                  default: "app_user"
+                adminPasswordSecretRef:
+                  type: object
+                  # `default: {}` force la matérialisation de l'objet pour que les
+                  # défauts des champs enfants s'appliquent même si l'utilisateur
+                  # omet complètement la référence.
+                  default: {}
+                  properties:
+                    name:
+                      type: string
+                      default: "database-passwords"
+                    namespace:
+                      type: string
+                      default: "default"
+                    key:
+                      type: string
+                      default: "admin-password"
+                userPasswordSecretRef:
+                  type: object
+                  default: {}
+                  properties:
+                    name:
+                      type: string
+                      default: "database-passwords"
+                    namespace:
+                      type: string
+                      default: "default"
+                    key:
+                      type: string
+                      default: "user-password"
+              required: [size]

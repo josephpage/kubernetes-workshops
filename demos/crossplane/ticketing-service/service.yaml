@@ -1,0 +1,423 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ticketing-system
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ticketing-app
+  namespace: ticketing-system
+data:
+  app.py: |
+    import http.server
+    import json
+    import urllib.parse
+    from datetime import datetime
+
+    tickets = {}
+    ticket_counter = 0
+
+    class TicketHandler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            parsed_url = urllib.parse.urlparse(self.path)
+            path = parsed_url.path
+
+            if path == '/':
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html; charset=utf-8')
+                self.end_headers()
+                
+                # UI Premium Sombre
+                html = """
+                <!DOCTYPE html>
+                <html lang="fr">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>OctoPlatform - Centre de Support & Ticketing</title>
+                    <style>
+                        body {
+                            font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+                            background: radial-gradient(circle at top, #1e1e2f 0%, #0f0f15 100%);
+                            color: #e2e8f0;
+                            margin: 0;
+                            padding: 40px 20px;
+                            min-height: 100vh;
+                        }
+                        .container {
+                            max-width: 900px;
+                            margin: 0 auto;
+                        }
+                        header {
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                            padding-bottom: 20px;
+                            margin-bottom: 30px;
+                        }
+                        h1 {
+                            font-size: 2.2rem;
+                            background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+                            -webkit-background-clip: text;
+                            -webkit-text-fill-color: transparent;
+                            margin: 0;
+                        }
+                        .badge {
+                            background: rgba(99, 102, 241, 0.2);
+                            color: #a5b4fc;
+                            padding: 6px 14px;
+                            border-radius: 20px;
+                            font-weight: 600;
+                            border: 1px solid rgba(99, 102, 241, 0.3);
+                        }
+                        .ticket-list {
+                            display: grid;
+                            gap: 20px;
+                        }
+                        .no-tickets {
+                            text-align: center;
+                            padding: 60px;
+                            background: rgba(255, 255, 255, 0.02);
+                            border-radius: 16px;
+                            border: 1px dashed rgba(255, 255, 255, 0.1);
+                            color: #94a3b8;
+                        }
+                        .ticket-card {
+                            background: rgba(255, 255, 255, 0.03);
+                            border: 1px solid rgba(255, 255, 255, 0.05);
+                            border-radius: 16px;
+                            padding: 24px;
+                            transition: all 0.3s ease;
+                            position: relative;
+                            overflow: hidden;
+                        }
+                        .ticket-card:hover {
+                            transform: translateY(-2px);
+                            border-color: rgba(99, 102, 241, 0.3);
+                            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+                        }
+                        .ticket-card::before {
+                            content: '';
+                            position: absolute;
+                            top: 0;
+                            left: 0;
+                            width: 4px;
+                            height: 100%;
+                            background: #fbbf24; /* En cours / orange */
+                        }
+                        .ticket-card.approved::before {
+                            background: #10b981; /* Approuvé / vert */
+                        }
+                        .ticket-header {
+                            display: flex;
+                            justify-content: space-between;
+                            margin-bottom: 12px;
+                            font-size: 0.9rem;
+                        }
+                        .ticket-title {
+                            font-size: 1.3rem;
+                            font-weight: 700;
+                            margin: 0 0 10px 0;
+                            color: #f8fafc;
+                        }
+                        .ticket-details {
+                            color: #94a3b8;
+                            font-size: 0.95rem;
+                            line-height: 1.5;
+                            background: rgba(0, 0, 0, 0.2);
+                            padding: 12px;
+                            border-radius: 8px;
+                            font-family: monospace;
+                            margin-top: 10px;
+                            white-space: pre-wrap;
+                        }
+                        .meta-info {
+                            display: flex;
+                            gap: 15px;
+                            color: #64748b;
+                            font-size: 0.85rem;
+                            margin-top: 15px;
+                        }
+                        .approve-form {
+                            margin-top: 20px;
+                            background: rgba(255, 255, 255, 0.02);
+                            border: 1px solid rgba(255, 255, 255, 0.05);
+                            padding: 15px;
+                            border-radius: 8px;
+                        }
+                        .form-grid {
+                            display: grid;
+                            grid-template-columns: 1fr 1fr 1fr;
+                            gap: 10px;
+                            margin-bottom: 10px;
+                        }
+                        .form-group {
+                            display: flex;
+                            flex-direction: column;
+                        }
+                        .form-group label {
+                            font-size: 0.75rem;
+                            color: #94a3b8;
+                            margin-bottom: 4px;
+                        }
+                        .form-group input {
+                            background: #1e1e2f;
+                            border: 1px solid rgba(255, 255, 255, 0.1);
+                            color: #e2e8f0;
+                            padding: 6px 10px;
+                            border-radius: 4px;
+                            font-size: 0.85rem;
+                        }
+                        .btn-approve {
+                            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                            color: white;
+                            border: none;
+                            padding: 8px 16px;
+                            border-radius: 4px;
+                            font-weight: 600;
+                            cursor: pointer;
+                            font-size: 0.85rem;
+                            align-self: flex-end;
+                        }
+                        .btn-approve:hover {
+                            opacity: 0.9;
+                        }
+                        .resolution-data {
+                            margin-top: 15px;
+                            background: rgba(16, 185, 129, 0.05);
+                            border: 1px dashed rgba(16, 185, 129, 0.3);
+                            padding: 12px;
+                            border-radius: 8px;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <header>
+                            <div>
+                                <h1>OctoPlatform Center</h1>
+                                <p style="margin: 5px 0 0 0; color: #64748b;">Console d'approbation et de suivi des tickets d'infrastructure</p>
+                            </div>
+                            <span class="badge">""" + str(len(tickets)) + """ Ticket(s) actif(s)</span>
+                        </header>
+                        
+                        <div class="ticket-list">
+                """
+                
+                if not tickets:
+                    html += """
+                            <div class="no-tickets">
+                                <p style="font-size: 1.2rem; margin-bottom: 5px;">Aucun ticket reçu pour le moment</p>
+                                <p style="font-size: 0.9rem; margin: 0;">Les requêtes issues des TicketRequests Crossplane apparaîtront ici automatiquement.</p>
+                            </div>
+                    """
+                else:
+                    for t_id, t in sorted(tickets.items(), reverse=True):
+                        status_class = "approved" if t['status'] == "Approved" else "pending"
+                        html += f"""
+                            <div class="ticket-card {status_class}">
+                                <div class="ticket-header">
+                                    <span style="color: #6366f1; font-weight: 600;">{t_id}</span>
+                                    <span style="color: {'#10b981' if t['status'] == 'Approved' else '#fbbf24'}; font-weight: bold;">
+                                        Statut: {t['status']}
+                                    </span>
+                                </div>
+                                <h2 class="ticket-title">{t.get('title', 'Sans titre')}</h2>
+                                <p style="margin: 0; color: #cbd5e1;">Demandé par <strong>{t.get('requester', 'Inconnu')}</strong> pour le service <strong>{t.get('service', 'Non spécifié')}</strong>.</p>
+                                <div class="ticket-details">{t.get('description', '')}</div>
+                        """
+                        
+                        if t['status'] == "Pending":
+                            default_ns = f"ns-{t.get('requester', 'dev')}-{t_id.lower()}"
+                            html += f"""
+                                <form class="approve-form" action="/approve" method="POST">
+                                    <input type="hidden" name="ticket_id" value="{t_id}">
+                                    <div class="form-grid">
+                                        <div class="form-group">
+                                            <label>Nom du Namespace à créer</label>
+                                            <input type="text" name="namespace_name" value="{default_ns}" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Limite CPU (Cores)</label>
+                                            <input type="text" name="cpu_limit" value="2" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Limite Mémoire (Gi)</label>
+                                            <input type="text" name="memory_limit" value="4Gi" required>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; justify-content: flex-end;">
+                                        <button class="btn-approve" type="submit">Approuver & Renseigner les Données</button>
+                                    </div>
+                                </form>
+                            """
+                        else:
+                            html += f"""
+                                <div class="resolution-data">
+                                    <h4 style="margin: 0 0 8px 0; color: #10b981;">Données de réalisation injectées :</h4>
+                                    <p style="margin: 2px 0; font-size: 0.9rem;">Namespace : <code>{t['output_data'].get('namespace_name')}</code></p>
+                                    <p style="margin: 2px 0; font-size: 0.9rem;">CPU Limit : <code>{t['output_data'].get('cpu_limit')}</code></p>
+                                    <p style="margin: 2px 0; font-size: 0.9rem;">Memory Limit : <code>{t['output_data'].get('memory_limit')}</code></p>
+                                    <div class="meta-info" style="margin-top: 10px;">
+                                        <span>Approuvé par: {t.get('approved_by')}</span>
+                                        <span>le: {t.get('resolved_at')}</span>
+                                    </div>
+                                </div>
+                            """
+                        
+                        html += """
+                            </div>
+                        """
+                
+                html += """
+                        </div>
+                    </div>
+                </body>
+                </html>
+                """
+                self.wfile.write(html.encode('utf-8'))
+
+            elif path.startswith('/tickets/'):
+                t_id = path.split('/')[-1]
+                if t_id in tickets:
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(tickets[t_id]).encode('utf-8'))
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+                    self.wfile.write(b"Ticket Not Found")
+            else:
+                self.send_response(404)
+                self.end_headers()
+                self.wfile.write(b"Not Found")
+
+        def do_POST(self):
+            global ticket_counter
+            parsed_url = urllib.parse.urlparse(self.path)
+            path = parsed_url.path
+
+            if path == '/tickets':
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                try:
+                    ticket_data = json.loads(post_data.decode('utf-8'))
+                    
+                    ticket_counter += 1
+                    t_id = f"TICKET-{ticket_counter}"
+                    
+                    tickets[t_id] = {
+                        "id": t_id,
+                        "title": ticket_data.get("title", "Sans titre"),
+                        "description": ticket_data.get("description", ""),
+                        "requester": ticket_data.get("requester", "Inconnu"),
+                        "service": ticket_data.get("service", "Non spécifié"),
+                        "status": "Pending",
+                        "date": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        "output_data": {}
+                    }
+                    
+                    self.send_response(201)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    response = {"status": "success", "ticket_id": t_id, "message": "Ticket created successfully"}
+                    self.wfile.write(json.dumps(response).encode('utf-8'))
+                except Exception as e:
+                    self.send_response(400)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    response = {"status": "error", "message": str(e)}
+                    self.wfile.write(json.dumps(response).encode('utf-8'))
+
+            elif path == '/approve':
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length).decode('utf-8')
+                params = urllib.parse.parse_qs(post_data)
+                
+                t_id = params.get('ticket_id', [None])[0]
+                if t_id and t_id in tickets:
+                    tickets[t_id]['status'] = "Approved"
+                    tickets[t_id]['approved_by'] = "admin@octo.com"
+                    tickets[t_id]['resolved_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    tickets[t_id]['output_data'] = {
+                        "namespace_name": params.get('namespace_name', ['default'])[0],
+                        "cpu_limit": params.get('cpu_limit', ['1'])[0],
+                        "memory_limit": params.get('memory_limit', ['2Gi'])[0]
+                    }
+                    
+                    # Rediriger vers l'UI
+                    self.send_response(303)
+                    self.send_header('Location', '/')
+                    self.end_headers()
+                else:
+                    self.send_response(400)
+                    self.end_headers()
+                    self.wfile.write(b"Invalid ticket ID")
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+    def run(server_class=http.server.HTTPServer, handler_class=TicketHandler, port=8080):
+        server_address = ('', port)
+        httpd = server_class(server_address, handler_class)
+        print(f"Starting ticketing server on port {port}...")
+        httpd.serve_forever()
+
+    if __name__ == '__main__':
+        run()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ticketing-service
+  namespace: ticketing-system
+  labels:
+    app: ticketing-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ticketing-service
+  template:
+    metadata:
+      labels:
+        app: ticketing-service
+    spec:
+      containers:
+      - name: python-app
+        image: python:3.11-alpine
+        command: ["python", "/app/app.py"]
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            memory: 128Mi
+            cpu: 200m
+          requests:
+            memory: 64Mi
+            cpu: 50m
+        volumeMounts:
+        - name: code-volume
+          mountPath: /app
+      volumes:
+      - name: code-volume
+        configMap:
+          name: ticketing-app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ticketing-service
+  namespace: ticketing-system
+spec:
+  type: NodePort
+  ports:
+  - port: 80
+    targetPort: 8080
+    nodePort: 30080
+    name: http
+  selector:
+    app: ticketing-service

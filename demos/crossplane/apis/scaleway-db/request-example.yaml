@@ -1,0 +1,17 @@
+# La "requête" du développeur : une XR cluster-scoped (équivalent de la request
+# namespacée de l'atelier Kratix). Les refs de secrets sont facultatives : les
+# défauts du schéma pointent sur database-passwords/{admin,user}-password
+# dans le namespace default.
+apiVersion: scaleway.octo.com/v1alpha1
+kind: PostgresSQLInstance
+metadata:
+  name: pg-instance-demo
+spec:
+  size: db-dev
+  postgres_version: "15"
+  db_name: "production_db"
+  db_user: "app_user"
+  # adminPasswordSecretRef:
+  #   name: mon-secret-perso
+  #   namespace: default
+  #   key: mot-de-passe-admin

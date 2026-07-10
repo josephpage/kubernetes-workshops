@@ -1,0 +1,24 @@
+# Équivalent du workflow `configure` de la Promise Kratix ticketing : le pipeline
+# est ici une Composition Function permanente (gRPC), pas un Job relancé à chaque
+# changement. Le "polling" de 180 s du pipeline Kratix devient une vérification
+# rapide à chaque réconciliation de la XR (~60 s).
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: ticketrequests.platform.octo.com
+spec:
+  compositeTypeRef:
+    apiVersion: platform.octo.com/v1alpha1
+    kind: TicketRequest
+  mode: Pipeline
+  pipeline:
+    - step: ticket-gate
+      functionRef:
+        name: function-ticket-gate
+      input:
+        apiVersion: ticket-gate.fn.octo.com/v1alpha1
+        kind: TicketGateInput
+        apiUrl: http://ticketing-service.ticketing-system.svc.cluster.local
+    - step: auto-ready
+      functionRef:
+        name: function-auto-ready

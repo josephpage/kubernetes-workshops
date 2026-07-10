@@ -1,0 +1,21 @@
+# En Crossplane v2, une Composition peut créer des ressources Kubernetes arbitraires
+# (ici : Namespace, ResourceQuota, Secret pour les exercices 2 et 3), mais le RBAC de
+# Crossplane ne couvre par défaut que ses propres types et les Managed Resources des
+# providers. Ce ClusterRole est agrégé au rôle du pod crossplane via le label
+# rbac.crossplane.io/aggregate-to-crossplane.
+#
+# Sans lui, les exercices 2 et 3 échouent avec des events du type :
+#   cannot apply composed resource: ... is forbidden
+#
+# Point de débrief : ce droit cluster-wide sur les secrets est le prix de la
+# souplesse — à restreindre en production (namespaces dédiés, kyverno/OPA...).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: crossplane-workshop-composed-resources
+  labels:
+    rbac.crossplane.io/aggregate-to-crossplane: "true"
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "resourcequotas", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

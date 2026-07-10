@@ -1,0 +1,20 @@
+# Équivalent du workflow `configure` de la Promise Kratix namespace-secret.
+# La function déclare son besoin de lire la TicketRequest (required resources du
+# protocole RunFunction) : Crossplane la résout et rappelle la function — pas de
+# client Kubernetes ni de RBAC dédié dans le code, contrairement au pipeline Kratix.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: namespacesecretrequests.platform.octo.com
+spec:
+  compositeTypeRef:
+    apiVersion: platform.octo.com/v1alpha1
+    kind: NamespaceSecretRequest
+  mode: Pipeline
+  pipeline:
+    - step: namespace-secret
+      functionRef:
+        name: function-namespace-secret
+    - step: auto-ready
+      functionRef:
+        name: function-auto-ready

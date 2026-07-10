@@ -1,0 +1,7 @@
+apiVersion: meta.pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: function-ticket-gate
+spec:
+  crossplane:
+    version: ">=v2.0.0-0"

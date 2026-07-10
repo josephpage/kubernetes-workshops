@@ -41,6 +41,12 @@ variable "enable_crossplane" {
   description = "Installer Crossplane sur le cluster"
 }
 
+variable "crossplane_version" {
+  type        = string
+  default     = "1.16.0"
+  description = "Version du chart Helm Crossplane (le défaut préserve les ateliers existants)"
+}
+
 variable "enable_argocd" {
   type        = bool
   default     = false

@@ -1,0 +1,56 @@
+# Équivalent de la section `spec.api` de la Promise Kratix ticketing.
+# Le status déclaré ici est alimenté par la function ticket-gate à chaque
+# réconciliation (là où le pipeline Kratix écrivait /kratix/metadata/status.yaml).
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: ticketrequests.platform.octo.com
+spec:
+  scope: Cluster
+  group: platform.octo.com
+  names:
+    kind: TicketRequest
+    plural: ticketrequests
+    singular: ticketrequest
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                requester:
+                  type: string
+                severity:
+                  type: string
+                  enum: [low, medium, high]
+                  default: medium
+              required: [title, requester]
+            status:
+              type: object
+              properties:
+                ticketId:
+                  type: string
+                status:
+                  type: string
+                  enum: [Pending, Approved, Failed]
+                namespaceName:
+                  type: string
+                cpuLimit:
+                  type: string
+                memoryLimit:
+                  type: string
+                approvedBy:
+                  type: string
+                resolvedAt:
+                  type: string
+                message:
+                  type: string

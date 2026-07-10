@@ -142,8 +142,18 @@ resource "kubernetes_secret_v1" "scaleway_creds" {
     credentials = jsonencode({
       access_key = var.scaleway_access_key
       secret_key = var.scaleway_secret_key
-      project_id = var.scaleway_project_id != null ? var.scaleway_project_id : ""
+      project_id = var.scaleway_project_id
     })
+  }
+
+  lifecycle {
+    # Contrairement au provider Terraform, le Provider Scaleway de Crossplane ne lit
+    # PAS SCW_DEFAULT_PROJECT_ID : un project_id vide fait échouer la création des
+    # ressources RDB avec "At least project_id is required".
+    precondition {
+      condition     = var.scaleway_project_id != null && var.scaleway_project_id != ""
+      error_message = "scaleway_project_id est requis (passez -var=\"scaleway_project_id=$SCW_DEFAULT_PROJECT_ID\")."
+    }
   }
 
   depends_on = [module.worker_cluster]

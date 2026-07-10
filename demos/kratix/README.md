@@ -112,9 +112,12 @@ tofu init
 tofu apply \
   -var="scaleway_access_key=$SCW_ACCESS_KEY" \
   -var="scaleway_secret_key=$SCW_SECRET_KEY" \
+  -var="scaleway_project_id=$SCW_DEFAULT_PROJECT_ID" \
   -auto-approve
 ```
 *Note : Cette étape provisionne deux clusters Kapsule Scaleway physiques complets, configure Traefik, cert-manager, installe Crossplane ainsi qu'ArgoCD sur le cluster worker, et génère automatiquement le secret d'accès S3 sur la Platform. Compter environ 8 à 12 minutes.*
+
+*`scaleway_project_id` est obligatoire : contrairement au provider Terraform, le Provider Scaleway de Crossplane ne lit pas la variable d'environnement `SCW_DEFAULT_PROJECT_ID` — un project_id vide fait échouer la création de l'instance RDB avec `At least project_id is required`.*
 
 #### 1.2 Configurer vos contextes kubectl
 Une fois le déploiement Terraform terminé, le script écrit les fichiers de configuration kubeconfig directement dans votre répertoire personnel `~/.kube/`.
@@ -638,7 +641,11 @@ Pour éviter des coûts cloud inutiles sur votre compte Scaleway, détruisez les
 cd demos/kratix/terraform
 
 # Détruire les deux clusters Scaleway et le bucket S3
-tofu destroy -auto-approve
+tofu destroy \
+  -var="scaleway_access_key=$SCW_ACCESS_KEY" \
+  -var="scaleway_secret_key=$SCW_SECRET_KEY" \
+  -var="scaleway_project_id=$SCW_DEFAULT_PROJECT_ID" \
+  -auto-approve
 ```
 
 ---

@@ -1,0 +1,48 @@
+# Équivalent de la section `spec.api` de la Promise Kratix namespace-secret.
+# Par rapport à Kratix, le champ ticketRequestNamespace disparaît : les
+# TicketRequests sont désormais des XRs cluster-scoped.
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: namespacesecretrequests.platform.octo.com
+spec:
+  scope: Cluster
+  group: platform.octo.com
+  names:
+    kind: NamespaceSecretRequest
+    plural: namespacesecretrequests
+    singular: namespacesecretrequest
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                ticketRequestName:
+                  type: string
+                  description: "Nom de la TicketRequest dont dépend ce Secret"
+                secretName:
+                  type: string
+                  default: app-secret
+                stringData:
+                  type: object
+                  additionalProperties:
+                    type: string
+              required: [ticketRequestName]
+            status:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [Pending, Ready, WaitingDependency, Failed]
+                message:
+                  type: string
+                namespaceName:
+                  type: string
+                secretName:
+                  type: string

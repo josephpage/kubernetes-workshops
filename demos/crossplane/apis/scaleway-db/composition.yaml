@@ -1,0 +1,196 @@
+# Équivalent Crossplane du workflow `configure` de la Promise Kratix scaleway-db :
+# là où le pipeline Kratix exécutait un script shell (yq + kubectl) dans un Job pour
+# générer les manifests dans /kratix/output/, la Composition déclare les mêmes 4
+# Managed Resources et les alimente par patches — aucun code à exécuter.
+#
+# Le workflow `delete` de la Promise disparaît : les MRs portent des ownerReferences
+# vers la XR, leur suppression (et la destruction réelle chez Scaleway, via
+# deletionPolicy: Delete) est assurée par la garbage collection de Kubernetes.
+#
+# Les 2 Secrets que le pipeline Kratix copiait vers le cluster worker disparaissent
+# aussi : en mono-cluster, les MRs référencent directement le Secret de l'utilisateur.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: postgressqlinstances.scaleway.octo.com
+spec:
+  compositeTypeRef:
+    apiVersion: scaleway.octo.com/v1alpha1
+    kind: PostgresSQLInstance
+  mode: Pipeline
+  pipeline:
+    - step: generate-rdb-resources
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: instance
+            base:
+              apiVersion: rdb.scaleway.upbound.io/v1alpha1
+              kind: Instance
+              spec:
+                # En production on préférerait `Orphan` pour survivre à une
+                # suppression accidentelle de la XR ; `Delete` illustre le cycle
+                # de vie complet (pédagogique, comme dans l'atelier Kratix).
+                deletionPolicy: Delete
+                forProvider:
+                  engine: PostgreSQL-15
+                  nodeType: db-dev-s
+                  isHaCluster: false
+                  region: fr-par
+                  disableBackup: true
+                  userName: scaleway_admin
+                  passwordSecretRef:
+                    name: ""
+                    namespace: ""
+                    key: ""
+                writeConnectionSecretToRef:
+                  name: ""
+                  namespace: crossplane-system
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.name
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: spec.forProvider.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-cluster"
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.postgres_version
+                toFieldPath: spec.forProvider.engine
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "PostgreSQL-%s"
+              # Équivalent du `if [ "$SIZE" = "db-prod" ]` du pipeline Kratix
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.size
+                toFieldPath: spec.forProvider.nodeType
+                transforms:
+                  - type: map
+                    map:
+                      db-dev: db-dev-s
+                      db-prod: db-prod-m
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.adminPasswordSecretRef.name
+                toFieldPath: spec.forProvider.passwordSecretRef.name
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.adminPasswordSecretRef.namespace
+                toFieldPath: spec.forProvider.passwordSecretRef.namespace
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.adminPasswordSecretRef.key
+                toFieldPath: spec.forProvider.passwordSecretRef.key
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: spec.writeConnectionSecretToRef.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "pg-instance-conn-%s"
+
+          - name: database
+            base:
+              apiVersion: rdb.scaleway.upbound.io/v1alpha1
+              kind: Database
+              spec:
+                deletionPolicy: Delete
+                forProvider:
+                  instanceIdRef:
+                    name: ""
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-db"
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.db_name
+                toFieldPath: spec.forProvider.name
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: spec.forProvider.instanceIdRef.name
+
+          - name: user
+            base:
+              apiVersion: rdb.scaleway.upbound.io/v1alpha1
+              kind: User
+              spec:
+                deletionPolicy: Delete
+                forProvider:
+                  isAdmin: false
+                  instanceIdRef:
+                    name: ""
+                  passwordSecretRef:
+                    name: ""
+                    namespace: ""
+                    key: ""
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-user"
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.db_user
+                toFieldPath: spec.forProvider.name
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: spec.forProvider.instanceIdRef.name
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.userPasswordSecretRef.name
+                toFieldPath: spec.forProvider.passwordSecretRef.name
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.userPasswordSecretRef.namespace
+                toFieldPath: spec.forProvider.passwordSecretRef.namespace
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.userPasswordSecretRef.key
+                toFieldPath: spec.forProvider.passwordSecretRef.key
+
+          - name: privilege
+            base:
+              apiVersion: rdb.scaleway.upbound.io/v1alpha1
+              kind: Privilege
+              spec:
+                deletionPolicy: Delete
+                forProvider:
+                  permission: readwrite
+                  instanceIdRef:
+                    name: ""
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-privilege"
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: spec.forProvider.instanceIdRef.name
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.db_name
+                toFieldPath: spec.forProvider.databaseName
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.db_user
+                toFieldPath: spec.forProvider.userName
+
+    # La XR passe Ready quand toutes les MRs composées le sont — équivalent du
+    # suivi de convergence que FluxCD + Kratix assuraient implicitement.
+    - step: auto-ready
+      functionRef:
+        name: function-auto-ready

@@ -1,0 +1,9 @@
+# Copiez ce fichier en `.envrc` (ignoré par git) et remplacez les valeurs.
+# Nécessite direnv : https://direnv.net/
+export SCW_ACCESS_KEY="REPLACE_ME"
+export SCW_SECRET_KEY="REPLACE_ME"
+export SCW_DEFAULT_PROJECT_ID="REPLACE_ME"
+
+export TF_VAR_scaleway_access_key="$SCW_ACCESS_KEY"
+export TF_VAR_scaleway_secret_key="$SCW_SECRET_KEY"
+export TF_VAR_scaleway_project_id="$SCW_DEFAULT_PROJECT_ID"
