@@ -68,8 +68,8 @@ flowchart TD
     GitOps -->|5a. Déploie DatabaseInstance| Crossplane
     
     %% Scénario 2 : Ticketing
-    PipelinePod -->|3b. REST POST (Création)| Ticketing
-    PipelinePod -->|4b. REST GET (Polling)| Ticketing
+    PipelinePod -->|"3b. REST POST (Création)"| Ticketing
+    PipelinePod -->|"4b. REST GET (Polling)"| Ticketing
     Admin["Opérateur Support"] -->|5b. Approuve & Saisit Quotas| Ticketing
     PipelinePod -->|6b. Récupère Quotas & écrit| S3Bucket
     GitOps -->|7b. Déploie Namespace + Quota| WorkerCluster["Worker Cluster"]

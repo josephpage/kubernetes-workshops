@@ -1,6 +1,6 @@
 ## Pre-requisites
 
-- Install [OpenTofu]() on your machine
+- Install [OpenTofu](https://opentofu.org/docs/intro/install/) on your machine
 - Install [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
 - Install [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
 
