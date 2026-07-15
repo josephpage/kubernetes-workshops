@@ -1,0 +1,50 @@
+# Exercice 4 : l'API "application" de la plateforme. Contrairement aux exercices
+# précédents (provisioning), cette XRD porte aussi une commande day-2 déclarative :
+# spec.restartedAt. Modifier ce champ NE déclenche pas une "action" au sens
+# impératif — la Composition le patche dans les annotations du pod template, et
+# c'est le contrôleur Deployment qui déduit le rollout. C'est exactement le
+# mécanisme de `kubectl rollout restart` : beaucoup d'opérations day-2 sont en
+# réalité de simples changements d'état désiré.
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: appinstances.platform.octo.com
+spec:
+  scope: Cluster
+  group: platform.octo.com
+  names:
+    kind: AppInstance
+    plural: appinstances
+    singular: appinstance
+    shortNames: [appi]
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                image:
+                  type: string
+                  default: "ghcr.io/stefanprodan/podinfo:6.7.1"
+                  description: "Image de l'application (podinfo expose une API de cache adossée à Redis)"
+                replicas:
+                  type: integer
+                  default: 1
+                  minimum: 1
+                restartedAt:
+                  type: string
+                  format: date-time
+                  description: >-
+                    Équivalent déclaratif de `kubectl rollout restart` : horodatage
+                    RFC3339 du dernier redémarrage demandé, propagé dans les
+                    annotations du pod template de l'application.
+            status:
+              type: object
+              properties:
+                namespaceName:
+                  type: string

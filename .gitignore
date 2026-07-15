@@ -4,3 +4,10 @@
 *.tfstate.*
 .envrc
 demos/crossplane/platform/functions.rendered.yaml
+
+# Site Docusaurus (website/)
+website/node_modules/
+website/build/
+website/.docusaurus/
+# Contenu généré par website/scripts/sync-docs.mjs à partir des READMEs.
+website/docs/

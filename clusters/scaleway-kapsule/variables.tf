@@ -47,6 +47,12 @@ variable "crossplane_version" {
   description = "Version du chart Helm Crossplane (le défaut préserve les ateliers existants)"
 }
 
+variable "crossplane_args" {
+  type        = list(string)
+  default     = []
+  description = "Arguments supplémentaires passés au pod Crossplane via la valeur Helm `args` (ex. --enable-operations). Le défaut vide préserve les ateliers existants."
+}
+
 variable "enable_argocd" {
   type        = bool
   default     = false

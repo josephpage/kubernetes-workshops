@@ -33,6 +33,9 @@ TAG="${TAG:-v0.1.0}"
 ARCHS="${ARCHS:-amd64 arm64}"
 PUSH="${PUSH:-true}"
 
+# Récupérer le host Docker du contexte courant, sinon crossplane xpkg build utilise le socket par défaut (/var/run/docker.sock)
+export DOCKER_HOST="${DOCKER_HOST:-$(docker context inspect --format '{{.Endpoints.docker.Host}}')}"
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FUNCTIONS_DIR="$SCRIPT_DIR/../functions"
 BUILD_DIR="$(mktemp -d)"

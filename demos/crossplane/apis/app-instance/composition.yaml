@@ -1,0 +1,183 @@
+# Exercice 4 : composition 100 % déclarative (comme l'exercice 1) de ressources
+# Kubernetes natives (comme les exercices 2 et 3) : un namespace dédié, l'application
+# podinfo et son cache Redis.
+#
+# Le point pédagogique central est le patch de spec.restartedAt vers les annotations
+# du pod template de l'application : "redémarrer" n'est pas une action impérative,
+# c'est un nouvel état désiré. Le vrai impératif (FLUSHALL du cache) est traité à
+# part, par une Operation (cf. operations/flush-cache.yaml).
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: appinstances.platform.octo.com
+spec:
+  compositeTypeRef:
+    apiVersion: platform.octo.com/v1alpha1
+    kind: AppInstance
+  mode: Pipeline
+  pipeline:
+    - step: generate-app-resources
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          # Namespace dédié à l'instance : tout ce que le développeur doit
+          # inspecter (pods, jobs de flush...) vit ici, pas dans crossplane-system.
+          - name: namespace
+            base:
+              apiVersion: v1
+              kind: Namespace
+              metadata:
+                name: ""
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.name
+              # Les Operations (et l'exercice 3) liront le namespace dans le status
+              # de la XR plutôt que de deviner la convention de nommage.
+              - type: ToCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: status.namespaceName
+            # Un Namespace n'a pas de condition Ready exploitable : on le considère
+            # prêt dès qu'il existe.
+            readinessChecks:
+              - type: None
+
+          - name: app-deployment
+            base:
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: app
+                namespace: ""
+              spec:
+                replicas: 1
+                selector:
+                  matchLabels:
+                    app.kubernetes.io/name: app
+                template:
+                  metadata:
+                    labels:
+                      app.kubernetes.io/name: app
+                  spec:
+                    containers:
+                      - name: podinfo
+                        image: ghcr.io/stefanprodan/podinfo:6.7.1
+                        command: ["./podinfo"]
+                        args:
+                          - --port=9898
+                          # Active l'API /cache/{clé} de podinfo, adossée au Redis
+                          # composé ci-dessous — c'est elle qui rend le flush observable.
+                          - --cache-server=tcp://redis:6379
+                        ports:
+                          - containerPort: 9898
+                            name: http
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.namespace
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.image
+                toFieldPath: spec.template.spec.containers[0].image
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.replicas
+                toFieldPath: spec.replicas
+              # LE patch de l'exercice : le pattern `kubectl rollout restart`.
+              # La politique par défaut (fromFieldPath: Optional) fait que
+              # l'annotation n'apparaît que lorsque le développeur renseigne
+              # spec.restartedAt ; chaque nouvelle valeur change le pod template,
+              # donc déclenche un rolling update — sans aucun code impératif.
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.restartedAt
+                toFieldPath: spec.template.metadata.annotations[platform.octo.com/restartedAt]
+            # Sans readiness check explicite, function-auto-ready ne saurait pas
+            # conclure sur un Deployment (pas de condition Ready standard).
+            readinessChecks:
+              - type: MatchCondition
+                matchCondition:
+                  type: Available
+                  status: "True"
+
+          - name: app-service
+            base:
+              apiVersion: v1
+              kind: Service
+              metadata:
+                name: app
+                namespace: ""
+              spec:
+                selector:
+                  app.kubernetes.io/name: app
+                ports:
+                  - port: 9898
+                    targetPort: http
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.namespace
+            readinessChecks:
+              - type: None
+
+          # Le cache : un Redis volontairement éphémère (pas de persistance) —
+          # les données perdues au flush ou au redémarrage font partie de la démo.
+          - name: redis-deployment
+            base:
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: redis
+                namespace: ""
+              spec:
+                replicas: 1
+                selector:
+                  matchLabels:
+                    app.kubernetes.io/name: redis
+                template:
+                  metadata:
+                    labels:
+                      app.kubernetes.io/name: redis
+                  spec:
+                    containers:
+                      - name: redis
+                        image: redis:7-alpine
+                        args: ["redis-server", "--save", "", "--appendonly", "no"]
+                        ports:
+                          - containerPort: 6379
+                            name: redis
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.namespace
+            readinessChecks:
+              - type: MatchCondition
+                matchCondition:
+                  type: Available
+                  status: "True"
+
+          - name: redis-service
+            base:
+              apiVersion: v1
+              kind: Service
+              metadata:
+                # Le nom `redis` est un contrat : podinfo (--cache-server) et le Job
+                # de flush (redis-cli -h redis) le résolvent en DNS dans le namespace.
+                name: redis
+                namespace: ""
+              spec:
+                selector:
+                  app.kubernetes.io/name: redis
+                ports:
+                  - port: 6379
+                    targetPort: redis
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.namespace
+            readinessChecks:
+              - type: None
+
+    - step: auto-ready
+      functionRef:
+        name: function-auto-ready

@@ -1,4 +1,4 @@
-# Les Composition Functions utilisées par les trois exercices.
+# Les Composition Functions utilisées par les quatre exercices.
 #
 # Contrairement aux pipelines Kratix (Jobs éphémères lancés à chaque changement),
 # chaque Function est un Deployment permanent dans crossplane-system, appelé en
@@ -21,13 +21,22 @@ metadata:
 spec:
   package: xpkg.crossplane.io/crossplane-contrib/function-patch-and-transform:v0.10.7
 ---
-# Marque la XR Ready quand toutes ses ressources composées le sont (exercices 1 à 3).
+# Marque la XR Ready quand toutes ses ressources composées le sont (exercices 1 à 4).
 apiVersion: pkg.crossplane.io/v1
 kind: Function
 metadata:
   name: function-auto-ready
 spec:
   package: xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.7.0
+---
+# Exercice 4 : seule function communautaire déclarant la capability `operation`,
+# utilisée dans le pipeline de l'Operation de flush (script Python inline).
+apiVersion: pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: function-python
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/function-python:v0.5.0
 ---
 # Function custom de l'exercice 2 : crée le ticket auprès du service de ticketing,
 # suit son approbation, puis compose Namespace + ResourceQuota.

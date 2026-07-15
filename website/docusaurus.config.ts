@@ -16,10 +16,10 @@ const config: Config = {
   },
 
   // Set the production url of your site here
-  url: 'https://josephpage.github.io',
+  url: 'https://kubernetes.josephpage.dev',
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
-  baseUrl: '/kubernetes-workshops/',
+  baseUrl: '/',
   trailingSlash: false,
 
   // GitHub pages deployment config.
