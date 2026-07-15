@@ -1,7 +1,7 @@
-# Sous-ensemble statique de platform/functions.yaml.tpl : uniquement les 2 Functions
+# Sous-ensemble statique de platform/functions.yaml.tpl : uniquement les Functions
 # communautaires, sans dépendance au registre individuel de la session. Utile pour
-# les previews locales `crossplane render` de l'exercice 1 (Composition pure), qui
-# n'utilise pas les functions custom ticket-gate / namespace-secret.
+# les previews locales `crossplane composition render` des exercices 1 et 4 (Compositions pures),
+# qui n'utilisent pas les functions custom ticket-gate / namespace-secret.
 apiVersion: pkg.crossplane.io/v1
 kind: Function
 metadata:
@@ -15,3 +15,10 @@ metadata:
   name: function-auto-ready
 spec:
   package: xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.7.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: function-python
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/function-python:v0.5.0

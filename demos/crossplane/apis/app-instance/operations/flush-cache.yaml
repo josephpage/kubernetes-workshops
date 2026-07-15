@@ -1,0 +1,82 @@
+# Exercice 4 : l'action day-2 réellement impérative — vider le cache Redis.
+#
+# Une Operation est à Crossplane ce qu'un Job est à Kubernetes : elle s'exécute
+# UNE fois (avec retries, cf. retryLimit) puis reste comme trace auditable.
+# On la déclenche donc avec `kubectl create -f` (jamais `apply`) : grâce à
+# generateName, chaque create produit une nouvelle Operation, donc une nouvelle
+# exécution — comme on relancerait un Job.
+#
+# Le pipeline réutilise le même protocole que les Compositions (RunFunction gRPC),
+# mais avec deux différences :
+# - les required resources sont déclarées ICI, dans le manifeste (elles étaient
+#   déclarées par le code de la function dans l'exercice 3) ;
+# - les ressources désirées sont appliquées en server-side apply, SANS
+#   ownerReference : pas de garbage collection — d'où le ttlSecondsAfterFinished
+#   sur le Job produit.
+apiVersion: ops.crossplane.io/v1alpha1
+kind: Operation
+metadata:
+  generateName: flush-cache-
+spec:
+  mode: Pipeline
+  retryLimit: 3
+  pipeline:
+    - step: flush-redis
+      functionRef:
+        # function-python déclare la capability `operation` ; les functions de
+        # composition classiques (patch-and-transform, auto-ready) ne sont PAS
+        # utilisables ici (ValidPipeline=False).
+        name: function-python
+      requirements:
+        requiredResources:
+          - requirementName: app
+            apiVersion: platform.octo.com/v1alpha1
+            kind: AppInstance
+            name: demo-app # XR cluster-scoped : pas de namespace
+      input:
+        apiVersion: python.fn.crossplane.io/v1beta1
+        kind: Script
+        # Plutôt que d'ouvrir une connexion Redis depuis le pod de la function
+        # (crossplane-system), le script produit un Job DANS le namespace de
+        # l'application : l'action reste visible et débogable par le développeur
+        # (kubectl logs job/flush-cache-demo-app -n demo-app).
+        script: |
+          from crossplane.function import request, resource, response
+
+          def operate(req, rsp):
+              required = request.get_required_resource(req, "app")
+              if required is None:
+                  response.fatal(rsp, "AppInstance introuvable : le flush n'a pas de cible")
+                  return
+
+              app = resource.struct_to_dict(required.resource)
+              name = app["metadata"]["name"]
+              namespace = app.get("status", {}).get("namespaceName") or name
+
+              # Nom déterministe : si le pipeline est rejoué (retry), le
+              # server-side apply retombe sur le même Job au lieu d'en empiler.
+              job_name = f"flush-cache-{name}"
+
+              rsp.desired.resources["flush-job"].resource.update({
+                  "apiVersion": "batch/v1",
+                  "kind": "Job",
+                  "metadata": {"name": job_name, "namespace": namespace},
+                  "spec": {
+                      # Les Operations ne posent pas d'ownerReference : le TTL
+                      # fait office de garbage collection.
+                      "ttlSecondsAfterFinished": 60,
+                      "backoffLimit": 2,
+                      "template": {
+                          "spec": {
+                              "restartPolicy": "Never",
+                              "containers": [{
+                                  "name": "redis-cli",
+                                  "image": "redis:7-alpine",
+                                  "command": ["redis-cli", "-h", "redis", "FLUSHALL"],
+                              }],
+                          },
+                      },
+                  },
+              })
+
+              response.set_output(rsp, {"job": job_name, "namespace": namespace})

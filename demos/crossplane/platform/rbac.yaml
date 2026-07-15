@@ -1,10 +1,11 @@
 # En Crossplane v2, une Composition peut créer des ressources Kubernetes arbitraires
-# (ici : Namespace, ResourceQuota, Secret pour les exercices 2 et 3), mais le RBAC de
+# (ici : Namespace, ResourceQuota, Secret pour les exercices 2 et 3 ; Deployment et
+# Service pour l'exercice 4), mais le RBAC de
 # Crossplane ne couvre par défaut que ses propres types et les Managed Resources des
 # providers. Ce ClusterRole est agrégé au rôle du pod crossplane via le label
 # rbac.crossplane.io/aggregate-to-crossplane.
 #
-# Sans lui, les exercices 2 et 3 échouent avec des events du type :
+# Sans lui, les exercices 2 à 4 échouent avec des events du type :
 #   cannot apply composed resource: ... is forbidden
 #
 # Point de débrief : ce droit cluster-wide sur les secrets est le prix de la
@@ -18,4 +19,15 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["namespaces", "resourcequotas", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Exercice 4 : l'AppInstance compose des Deployments et Services...
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # ... et l'Operation de flush applique un Job (server-side apply).
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

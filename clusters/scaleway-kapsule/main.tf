@@ -173,6 +173,10 @@ resource "helm_release" "crossplane" {
   namespace        = "crossplane-system"
   create_namespace = true
   wait             = true
+
+  # `args: []` est la valeur par défaut du chart : sans crossplane_args explicite,
+  # ce bloc est neutre pour les ateliers existants.
+  values = [yamlencode({ args = var.crossplane_args })]
 }
 
 resource "helm_release" "argocd" {

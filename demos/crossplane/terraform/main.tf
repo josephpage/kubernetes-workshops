@@ -25,6 +25,9 @@ module "cluster" {
   vpc_id                      = scaleway_vpc.crossplane_vpc.id
   enable_crossplane           = true
   crossplane_version          = var.crossplane_version
+  # Operations (Operation, CronOperation, WatchOperation) est une feature alpha
+  # de Crossplane 2.x, requise pour l'exercice 4 (day-2).
+  crossplane_args             = ["--enable-operations"]
   enable_argocd               = false
   enable_fluxcd               = false
   enable_monitoring           = false

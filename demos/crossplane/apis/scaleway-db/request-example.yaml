@@ -11,7 +11,7 @@ spec:
   postgres_version: "15"
   db_name: "production_db"
   db_user: "app_user"
-  # adminPasswordSecretRef:
-  #   name: mon-secret-perso
-  #   namespace: default
-  #   key: mot-de-passe-admin
+#  adminPasswordSecretRef:
+#    name: mon-secret-perso
+#    namespace: default
+#    key: mot-de-passe-admin

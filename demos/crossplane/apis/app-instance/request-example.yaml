@@ -1,0 +1,10 @@
+# La "requête" du développeur : une application avec son cache, sans rien savoir
+# des Deployments/Services sous-jacents. Le champ restartedAt est volontairement
+# absent : il sera renseigné plus tard, par un patch, pour déclencher le
+# redémarrage déclaratif (cf. README, exercice 4).
+apiVersion: platform.octo.com/v1alpha1
+kind: AppInstance
+metadata:
+  name: demo-app
+spec:
+  replicas: 1

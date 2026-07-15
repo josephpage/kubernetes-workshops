@@ -1,0 +1,69 @@
+# Bonus de l'exercice 4 : la même action, planifiée. CronOperation est aux
+# Operations ce que CronJob est aux Jobs : à chaque échéance du schedule, elle
+# crée une Operation à partir du template ci-dessous (kubectl get operations
+# montre les exécutions successives, élaguées selon les *HistoryLimit).
+#
+# Le troisième kind, WatchOperation, déclenche le même genre de pipeline à chaque
+# changement d'une ressource observée — non couvert ici (cf. "Pour aller plus loin").
+apiVersion: ops.crossplane.io/v1alpha1
+kind: CronOperation
+metadata:
+  name: cron-flush-demo-app
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulHistoryLimit: 3
+  failedHistoryLimit: 1
+  operationTemplate:
+    spec:
+      mode: Pipeline
+      retryLimit: 3
+      pipeline:
+        - step: flush-redis
+          functionRef:
+            name: function-python
+          requirements:
+            requiredResources:
+              - requirementName: app
+                apiVersion: platform.octo.com/v1alpha1
+                kind: AppInstance
+                name: demo-app
+          input:
+            apiVersion: python.fn.crossplane.io/v1beta1
+            kind: Script
+            # Même script que operations/flush-cache.yaml — voir les commentaires là-bas.
+            script: |
+              from crossplane.function import request, resource, response
+
+              def operate(req, rsp):
+                  required = request.get_required_resource(req, "app")
+                  if required is None:
+                      response.fatal(rsp, "AppInstance introuvable : le flush n'a pas de cible")
+                      return
+
+                  app = resource.struct_to_dict(required.resource)
+                  name = app["metadata"]["name"]
+                  namespace = app.get("status", {}).get("namespaceName") or name
+                  job_name = f"flush-cache-{name}"
+
+                  rsp.desired.resources["flush-job"].resource.update({
+                      "apiVersion": "batch/v1",
+                      "kind": "Job",
+                      "metadata": {"name": job_name, "namespace": namespace},
+                      "spec": {
+                          "ttlSecondsAfterFinished": 60,
+                          "backoffLimit": 2,
+                          "template": {
+                              "spec": {
+                                  "restartPolicy": "Never",
+                                  "containers": [{
+                                      "name": "redis-cli",
+                                      "image": "redis:7-alpine",
+                                      "command": ["redis-cli", "-h", "redis", "FLUSHALL"],
+                                  }],
+                              },
+                          },
+                      },
+                  })
+
+                  response.set_output(rsp, {"job": job_name, "namespace": namespace})
