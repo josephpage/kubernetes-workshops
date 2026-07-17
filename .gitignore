@@ -5,9 +5,13 @@
 .envrc
 demos/crossplane/platform/functions.rendered.yaml
 
-# Site Docusaurus (website/)
+# Site Astro Starlight (website/) — détails dans website/.gitignore
 website/node_modules/
-website/build/
-website/.docusaurus/
+website/dist/
+website/.astro/
 # Contenu généré par website/scripts/sync-docs.mjs à partir des READMEs.
-website/docs/
+website/src/content/docs/introduction.md
+website/src/content/docs/ateliers/
+website/src/content/docs/comparatifs/
+website/src/content/docs/conventions/
+website/src/content/docs/environnements/
