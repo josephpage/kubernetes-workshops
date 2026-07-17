@@ -45,9 +45,10 @@ npm run check     # typecheck astro (sync automatique)
   internes du thème, à revalider après chaque montée de version de Starlight).
 - **Recherche** : Pagefind, intégré à Starlight (index construit au build).
 - **Mermaid** : rendu côté client par
-  [`public/scripts/mermaid-init.js`](public/scripts/mermaid-init.js)
-  (mermaid chargé depuis le CDN jsDelivr) ; les blocs ` ```mermaid ` sont
-  préparés au build par [`scripts/remark-mermaid.mjs`](scripts/remark-mermaid.mjs).
+  [`src/scripts/mermaid-init.js`](src/scripts/mermaid-init.js) — mermaid est
+  auto-hébergé (paquet npm bundlé par Vite en chunk séparé, téléchargé
+  uniquement sur les pages contenant un diagramme) ; les blocs ` ```mermaid `
+  sont préparés au build par [`scripts/remark-mermaid.mjs`](scripts/remark-mermaid.mjs).
 - **Validation de liens** : `starlight-links-validator` fait échouer le build
   sur tout lien interne cassé.
 

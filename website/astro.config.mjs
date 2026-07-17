@@ -4,6 +4,18 @@ import starlight from '@astrojs/starlight';
 import starlightLinksValidator from 'starlight-links-validator';
 import { remarkMermaid } from './scripts/remark-mermaid.mjs';
 
+// Charge le script d'init Mermaid sur chaque page, bundlé par Vite
+// (mermaid auto-hébergé : chunk séparé, chargé seulement si la page
+// contient un diagramme — voir src/scripts/mermaid-init.js).
+const mermaidRuntime = {
+  name: 'mermaid-runtime',
+  hooks: {
+    'astro:config:setup': ({ injectScript }) => {
+      injectScript('page', "import '/src/scripts/mermaid-init.js';");
+    },
+  },
+};
+
 export default defineConfig({
   site: 'https://kubernetes.josephpage.dev',
   markdown: {
@@ -12,6 +24,7 @@ export default defineConfig({
     syntaxHighlight: { type: 'shiki', excludeLangs: ['mermaid'] },
   },
   integrations: [
+    mermaidRuntime,
     starlight({
       title: 'Kubernetes Workshops',
       description: 'Ateliers pratiques Kubernetes — OCTO Technology & Octo Academy',
@@ -38,7 +51,6 @@ export default defineConfig({
       head: [
         { tag: 'meta', attrs: { property: 'og:image', content: 'https://kubernetes.josephpage.dev/img/social-card.jpg' } },
         { tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },
-        { tag: 'script', attrs: { type: 'module', src: '/scripts/mermaid-init.js' } },
       ],
       sidebar: [
         { label: 'Ateliers', items: [{ autogenerate: { directory: 'ateliers' } }] },
