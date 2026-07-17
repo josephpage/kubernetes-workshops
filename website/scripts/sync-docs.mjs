@@ -209,10 +209,6 @@ function splitTargetAndAnchor(target) {
 
 function rewriteLinksInContent(content, sourceRelPath) {
   const sourceDirAbs = path.dirname(path.join(REPO_ROOT, sourceRelPath));
-  const currentMapping = sourceToMapping.get(toPosix(sourceRelPath));
-  const currentDestDirAbs = path.dirname(
-    path.join(DOCS_OUT_DIR, currentMapping.destination),
-  );
 
   return content.replace(MD_LINK_RE, (full, labelPart, rawTarget) => {
     const target = rawTarget.trim();
