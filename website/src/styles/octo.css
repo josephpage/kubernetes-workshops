@@ -1,0 +1,79 @@
+/*
+ * Thème OCTO pour Starlight.
+ * Charte : bleu marine #0e2356 (octo.com --bs-primary) et cyan #00a3be / #00d2dd.
+ *
+ * Couche A — palettes via les variables OFFICIELLES de Starlight
+ * (mêmes noms que le générateur de thème de la doc Starlight,
+ * guide « CSS & Tailwind » → theming) : robuste entre versions.
+ * Couche B — « signature OCTO » (header marine, hero en dégradé) :
+ * s'appuie sur la structure interne du thème, à revalider visuellement
+ * après chaque montée de version de Starlight.
+ */
+
+/* ============ Couche A — palettes ============ */
+
+/* Mode sombre (défaut Starlight) : accent cyan, gris teintés marine. */
+:root {
+  --octo-navy: #0e2356;
+  --octo-cyan: #00a3be;
+  --octo-cyan-bright: #00d2dd;
+
+  --sl-color-accent-low: #003a41;
+  --sl-color-accent: #00a3be;
+  --sl-color-accent-high: #9be4ee;
+
+  --sl-color-white: #ffffff;
+  --sl-color-gray-1: #eceef2;
+  --sl-color-gray-2: #c0c4cd;
+  --sl-color-gray-3: #888f9e;
+  --sl-color-gray-4: #545b6b;
+  --sl-color-gray-5: #353c4b;
+  --sl-color-gray-6: #242b39;
+  --sl-color-black: #171b26;
+}
+
+/* Mode clair : accent marine. */
+:root[data-theme='light'] {
+  --sl-color-accent-low: #d5dcf0;
+  --sl-color-accent: #0e2356;
+  --sl-color-accent-high: #0a1a40;
+
+  --sl-color-white: #171b26;
+  --sl-color-gray-1: #242b39;
+  --sl-color-gray-2: #353c4b;
+  --sl-color-gray-3: #545b6b;
+  --sl-color-gray-4: #888f9e;
+  --sl-color-gray-5: #c0c4cd;
+  --sl-color-gray-6: #eceef2;
+  --sl-color-gray-7: #f5f6f9;
+  --sl-color-black: #ffffff;
+}
+
+/* Titres en Outfit, comme octo.com (chargé via @fontsource/outfit). */
+h1, h2, h3, h4, h5, h6, .site-title {
+  font-family: 'Outfit', var(--sl-font-system, sans-serif);
+}
+
+/* ============ Couche B — signature OCTO ============ */
+
+/* Bandeau supérieur marine avec titre et icônes blancs, dans les deux modes. */
+:root {
+  --sl-color-bg-nav: var(--octo-navy);
+}
+.site-title,
+header.header a,
+header.header .social-icons a,
+header.header starlight-theme-select label {
+  color: #fff;
+}
+
+/* Hero de la page d'accueil : dégradé marine → cyan façon octo.com. */
+[data-has-hero] .hero {
+  background: linear-gradient(140deg, #0e2356 0%, #0a38a7 60%, #00a3be 100%);
+  border-radius: 1rem;
+  padding: 3rem 1.5rem;
+}
+[data-has-hero] .hero h1,
+[data-has-hero] .hero .tagline {
+  color: #fff;
+}

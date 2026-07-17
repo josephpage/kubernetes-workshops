@@ -1,0 +1,44 @@
+---
+title: Kubernetes Workshops
+description: Ateliers pratiques Kubernetes — OCTO Technology & Octo Academy
+template: splash
+editUrl: false
+hero:
+  title: Kubernetes Workshops
+  tagline: Ateliers pratiques Kubernetes — OCTO Technology & Octo Academy
+  actions:
+    - text: Commencer
+      link: /introduction/
+      icon: right-arrow
+    - text: Voir sur GitHub
+      link: https://github.com/josephpage/kubernetes-workshops
+      icon: external
+      variant: minimal
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## Les ateliers
+
+<CardGrid>
+  <LinkCard
+    title="Kratix"
+    description="Construire une Internal Developer Platform avec des Promises"
+    href="/ateliers/kratix/"
+  />
+  <LinkCard
+    title="Crossplane"
+    description="La même plateforme self-service avec XRD + Compositions"
+    href="/ateliers/crossplane/"
+  />
+  <LinkCard
+    title="Kubeception"
+    description="Des clusters Kubernetes dans Kubernetes"
+    href="/ateliers/kubeception/"
+  />
+  <LinkCard
+    title="Kong"
+    description="API Gateway et Ingress Controller sur Kubernetes"
+    href="/ateliers/kong/"
+  />
+</CardGrid>
