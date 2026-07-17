@@ -1,0 +1,44 @@
+/*
+ * Charte OCTO : bleu marine #0e2356 et cyan #00a3be / #00d2dd.
+ * Starlight est sombre par défaut : :root = sombre, [data-theme='light'] = clair.
+ */
+:root {
+  --octo-navy: #0e2356;
+  --octo-cyan: #00a3be;
+  --octo-cyan-bright: #00d2dd;
+
+  /* Mode sombre : le cyan prend le relais (le marine manque de contraste). */
+  --sl-color-accent-low: #003c44;
+  --sl-color-accent: #00a3be;
+  --sl-color-accent-high: #8ce9f2;
+
+  /* Bandeau supérieur marine avec titre blanc, dans les deux modes. */
+  --sl-color-bg-nav: var(--octo-navy);
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #d6e0f7;
+  --sl-color-accent: #0e2356;
+  --sl-color-accent-high: #0a1a40;
+}
+
+/* Titres en Outfit, comme octo.com (chargé via @fontsource/outfit). */
+h1, h2, h3, h4, h5, h6, .site-title {
+  font-family: 'Outfit', var(--sl-font-system, sans-serif);
+}
+
+/* Le titre du site et les icônes du header restent lisibles sur le marine. */
+.site-title, header .social-icons a, header a {
+  color: #fff;
+}
+
+/* Hero de la page d'accueil : dégradé marine → cyan façon octo.com. */
+[data-has-hero] .hero {
+  background: linear-gradient(140deg, #0e2356 0%, #0a38a7 60%, #00a3be 100%);
+  border-radius: 1rem;
+  padding: 3rem 1.5rem;
+}
+[data-has-hero] .hero h1,
+[data-has-hero] .hero .tagline {
+  color: #fff;
+}

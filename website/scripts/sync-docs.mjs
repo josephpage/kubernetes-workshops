@@ -1,20 +1,21 @@
 #!/usr/bin/env node
-// Synchronise les README et docs de conventions du dépôt vers website/docs/.
+// Synchronise les README et docs de conventions du dépôt vers website/src/content/docs/.
 // Les fichiers sources restent la seule source de vérité : ce script régénère
-// intégralement website/docs/ à chaque exécution (voir "prestart"/"prebuild").
+// les fichiers générés à chaque exécution (voir "prestart"/"prebuild").
 //
 // N'utilise que des modules natifs Node (aucune dépendance externe).
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execSync } from 'node:child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const WEBSITE_ROOT = path.resolve(__dirname, '..');
 const REPO_ROOT = path.resolve(WEBSITE_ROOT, '..');
-const DOCS_OUT_DIR = path.join(WEBSITE_ROOT, 'docs');
+const DOCS_OUT_DIR = path.join(WEBSITE_ROOT, 'src', 'content', 'docs');
 
 const GITHUB_REPO_BLOB_BASE =
   'https://github.com/josephpage/kubernetes-workshops/blob/main';
@@ -23,13 +24,12 @@ const GITHUB_REPO_TREE_BASE =
 
 // ---------------------------------------------------------------------------
 // Table de mapping : source (relative à la racine du dépôt) -> destination
-// (relative à website/docs/), avec frontmatter optionnel.
+// (relative à website/src/content/docs/), avec frontmatter optionnel.
 // ---------------------------------------------------------------------------
 const FILE_MAPPING = [
   {
     source: 'README.md',
-    destination: 'index.md',
-    frontmatter: { slug: '/', sidebar_position: 1 },
+    destination: 'introduction.md',
   },
   {
     source: 'demos/crossplane/README.md',
@@ -82,17 +82,9 @@ const FILE_MAPPING = [
 ];
 
 // ---------------------------------------------------------------------------
-// Catégories de la sidebar (dossiers sous website/docs/).
-// ---------------------------------------------------------------------------
-const CATEGORIES = {
-  ateliers: { label: 'Ateliers', position: 2 },
-  comparatifs: { label: 'Comparatifs & recommandations', position: 3 },
-  conventions: { label: 'Conventions & contribution', position: 4 },
-  environnements: { label: 'Environnements (clusters)', position: 5 },
-};
-
 // Index : chemin source (relatif à la racine du dépôt, normalisé en posix)
 // -> entrée de mapping. Sert à résoudre les liens relatifs entre sources.
+// ---------------------------------------------------------------------------
 const sourceToMapping = new Map();
 for (const entry of FILE_MAPPING) {
   sourceToMapping.set(toPosix(entry.source), entry);
@@ -112,32 +104,38 @@ function fail(message) {
 }
 
 // ---------------------------------------------------------------------------
-// Étape a) Vider puis recréer website/docs/
+// Étape a) Vider seulement les chemins générés (préserve index.mdx/404.md).
 // ---------------------------------------------------------------------------
-function resetDocsDir() {
-  fs.rmSync(DOCS_OUT_DIR, { recursive: true, force: true });
+const GENERATED_PATHS = ['introduction.md', 'ateliers', 'comparatifs', 'conventions', 'environnements'];
+
+function resetGeneratedContent() {
+  for (const rel of GENERATED_PATHS) {
+    fs.rmSync(path.join(DOCS_OUT_DIR, rel), { recursive: true, force: true });
+  }
   fs.mkdirSync(DOCS_OUT_DIR, { recursive: true });
-  log(`dossier "${path.relative(WEBSITE_ROOT, DOCS_OUT_DIR)}" réinitialisé.`);
+  log('contenu généré réinitialisé dans src/content/docs/.');
 }
 
 // ---------------------------------------------------------------------------
-// Étape c) Fichiers _category_.json
+// Extraction du titre H1 (requis par Starlight).
 // ---------------------------------------------------------------------------
-function writeCategoryFiles() {
-  for (const [dirName, { label, position }] of Object.entries(CATEGORIES)) {
-    const dirPath = path.join(DOCS_OUT_DIR, dirName);
-    fs.mkdirSync(dirPath, { recursive: true });
-    const content = {
-      label,
-      position,
-    };
-    fs.writeFileSync(
-      path.join(dirPath, '_category_.json'),
-      JSON.stringify(content, null, 2) + '\n',
-      'utf8',
-    );
-  }
-  log(`fichiers _category_.json créés pour: ${Object.keys(CATEGORIES).join(', ')}.`);
+function extractTitle(body, sourceRelPath) {
+  const match = body.match(/^#\s+(.+?)\s*$/m);
+  if (!match) fail(`pas de titre H1 dans "${sourceRelPath}" (requis par Starlight).`);
+  const title = match[1].trim();
+  const idx = body.indexOf(match[0]);
+  const stripped = (body.slice(0, idx) + body.slice(idx + match[0].length)).replace(/^\s*\n/, '');
+  return { title, body: stripped };
+}
+
+// ---------------------------------------------------------------------------
+// Date de dernière mise à jour (best-effort via git log).
+// ---------------------------------------------------------------------------
+function sourceLastUpdated(sourceRelPath) {
+  try {
+    const out = execSync(`git log -1 --format=%cs -- "${sourceRelPath}"`, { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
+    return out || null; // format YYYY-MM-DD
+  } catch { return null; }
 }
 
 // ---------------------------------------------------------------------------
@@ -170,9 +168,10 @@ function splitFrontmatter(content) {
   return { frontmatter, body: content.slice(match[0].length) };
 }
 
-function serializeFrontmatterValue(value) {
+function serializeFrontmatterValue(value, isDate) {
   if (typeof value === 'number') return String(value);
   if (typeof value === 'boolean') return String(value);
+  if (isDate) return value; // YYYY-MM-DD non-quoté pour le champ lastUpdated
   // Chaîne : on quote si nécessaire (présence de ':' ou caractères spéciaux YAML).
   const needsQuotes = /[:#\[\]{}]/.test(value) || value === '';
   return needsQuotes ? JSON.stringify(value) : value;
@@ -182,7 +181,8 @@ function buildFrontmatter(existing, additions) {
   const merged = { ...existing, ...additions };
   const lines = ['---'];
   for (const [key, value] of Object.entries(merged)) {
-    lines.push(`${key}: ${serializeFrontmatterValue(value)}`);
+    const isDate = key === 'lastUpdated';
+    lines.push(`${key}: ${serializeFrontmatterValue(value, isDate)}`);
   }
   lines.push('---', '');
   return lines.join('\n');
@@ -233,13 +233,9 @@ function rewriteLinksInContent(content, sourceRelPath) {
     const targetMapping = sourceToMapping.get(targetRelToRepo);
 
     if (targetMapping) {
-      // La cible est un fichier source synchronisé : on pointe vers le .md généré.
-      const destAbs = path.join(DOCS_OUT_DIR, targetMapping.destination);
-      let relLink = toPosix(path.relative(currentDestDirAbs, destAbs));
-      if (!relLink.startsWith('.')) {
-        relLink = `./${relLink}`;
-      }
-      return `${labelPart}(${relLink}${anchor})`;
+      // La cible est un fichier source synchronisé : on pointe vers la route absolue du site.
+      const route = '/' + targetMapping.destination.replace(/\.md$/, '') + '/';
+      return `${labelPart}(${route}${anchor})`;
     }
 
     // Sinon : lien vers un fichier/dossier hors périmètre synchronisé -> GitHub.
@@ -269,13 +265,21 @@ function syncFile(entry) {
   const rawContent = fs.readFileSync(sourceAbs, 'utf8');
   const { frontmatter: existingFrontmatter, body } = splitFrontmatter(rawContent);
 
+  // Extraire le titre H1 et le retirer du corps
+  const { title, body: bodyWithoutH1 } = extractTitle(body, entry.source);
+
+  // Récupérer la date lastUpdated (best-effort)
+  const lastUpdated = sourceLastUpdated(entry.source);
+
   const additions = {
-    custom_edit_url: `${GITHUB_REPO_BLOB_BASE}/${toPosix(entry.source)}`,
+    title,
+    editUrl: `${GITHUB_REPO_BLOB_BASE}/${toPosix(entry.source)}`,
+    ...(lastUpdated ? { lastUpdated } : {}),
     ...(entry.frontmatter ?? {}),
   };
 
   const frontmatterBlock = buildFrontmatter(existingFrontmatter, additions);
-  const rewrittenBody = rewriteLinksInContent(body, entry.source);
+  const rewrittenBody = rewriteLinksInContent(bodyWithoutH1, entry.source);
 
   const finalContent = `${frontmatterBlock}\n${rewrittenBody}`;
 
@@ -285,8 +289,7 @@ function syncFile(entry) {
 }
 
 function run() {
-  resetDocsDir();
-  writeCategoryFiles();
+  resetGeneratedContent();
 
   let count = 0;
   for (const entry of FILE_MAPPING) {
