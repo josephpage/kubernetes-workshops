@@ -5,17 +5,16 @@
   "type": "module",
   "scripts": {
     "sync": "node scripts/sync-docs.mjs",
-    "predev": "npm run sync",
-    "dev": "astro dev",
-    "prebuild": "npm run sync",
-    "build": "astro build",
+    "dev": "pnpm run sync && astro dev",
+    "build": "pnpm run sync && astro build",
     "preview": "astro preview",
-    "precheck": "npm run sync",
-    "check": "astro check",
+    "check": "pnpm run sync && astro check",
     "astro": "astro"
   },
+  "packageManager": "pnpm@10.34.4",
   "engines": {
-    "node": ">=20.0"
+    "node": ">=20.0",
+    "pnpm": ">=10.0.0"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.41.3",

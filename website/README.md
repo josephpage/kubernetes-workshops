@@ -30,11 +30,11 @@ git-ignorés ; `index.mdx` (page d'accueil) est écrit à la main et commité.
 ## Commandes
 
 ```bash
-npm install       # installer les dépendances
-npm run dev       # serveur de développement (sync automatique)
-npm run build     # build de production dans dist/ (sync automatique)
-npm run preview   # servir dist/ en local
-npm run check     # typecheck astro (sync automatique)
+pnpm install       # installer les dépendances
+pnpm run dev       # serveur de développement (sync automatique)
+pnpm run build     # build de production dans dist/ (sync automatique)
+pnpm run preview   # servir dist/ en local
+pnpm run check     # typecheck astro (sync automatique)
 ```
 
 ## Thème et fonctionnalités
@@ -59,7 +59,7 @@ sources.
 ## Déploiement
 
 Le workflow [`.github/workflows/deploy-website.yml`](../.github/workflows/deploy-website.yml)
-construit le site (`npm ci`, `npm run check`, `npm run build`) et publie
+construit le site (`pnpm install --frozen-lockfile`, `pnpm run check`, `pnpm run build`) et publie
 `website/dist/` sur GitHub Pages à chaque push sur `main` touchant le site ou
 ses sources. Le domaine `kubernetes.josephpage.dev` est configuré dans les
 réglages GitHub Pages du dépôt.
