@@ -41,18 +41,20 @@ export default defineConfig({
         { tag: 'script', attrs: { type: 'module', src: '/scripts/mermaid-init.js' } },
       ],
       sidebar: [
-        { label: 'Ateliers', autogenerate: { directory: 'ateliers' } },
+        { label: 'Ateliers', items: [{ autogenerate: { directory: 'ateliers' } }] },
         {
           label: 'Guides',
           items: [
             { label: 'Introduction', slug: 'introduction' },
-            { label: 'Comparatifs & recommandations', autogenerate: { directory: 'comparatifs' } },
-            { label: 'Conventions & contribution', autogenerate: { directory: 'conventions' } },
+            { label: 'Comparatifs & recommandations', items: [{ autogenerate: { directory: 'comparatifs' } }] },
+            { label: 'Conventions & contribution', items: [{ autogenerate: { directory: 'conventions' } }] },
           ],
         },
-        { label: 'Environnements (clusters)', autogenerate: { directory: 'environnements' } },
+        { label: 'Environnements (clusters)', items: [{ autogenerate: { directory: 'environnements' } }] },
       ],
-      plugins: [starlightLinksValidator()],
+      // errorOnLocalLinks: les ateliers pointent volontairement vers
+      // http://localhost:... (services du cluster local du lecteur).
+      plugins: [starlightLinksValidator({ errorOnLocalLinks: false })],
     }),
   ],
 });
