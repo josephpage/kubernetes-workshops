@@ -40,6 +40,10 @@ jobs:
         working-directory: website
         run: npm ci
 
+      - name: Typecheck website
+        working-directory: website
+        run: npm run check
+
       - name: Build website
         working-directory: website
         run: npm run build
@@ -47,7 +51,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: website/build
+          path: website/dist
 
   deploy:
     needs: build
