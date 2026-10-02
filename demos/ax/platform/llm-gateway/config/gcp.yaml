@@ -1,0 +1,12 @@
+# Vertex AI (Gemini). Pas de clé : LiteLLM utilise les Application Default
+# Credentials, fournies par GKE Workload Identity au ServiceAccount
+# llm-gateway/litellm (rôle roles/aiplatform.user accordé par terraform/gcp).
+model_list:
+  - model_name: workshop-model
+    litellm_params:
+      model: vertex_ai/${LLM_MODEL}
+      vertex_project: ${LLM_VERTEX_PROJECT}
+      vertex_location: ${LLM_VERTEX_LOCATION}
+
+litellm_settings:
+  drop_params: true

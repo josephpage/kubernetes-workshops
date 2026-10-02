@@ -1,0 +1,113 @@
+# Stockage compatible S3 dans le cluster, pour les fournisseurs sans API S3
+# (Azure Blob Storage). Repris de l'overlay kind de Substrate
+# (manifests/ate-install/kind/rustfs.yaml), avec des identifiants lus dans le
+# Secret ate-snapshot-storage au lieu de valeurs en dur.
+#
+# Atelier uniquement : une seule réplique sur un volume persistant, sans
+# sauvegarde. En production, utiliser un stockage objet managé.
+#
+# Rendu par scripts/10-install-substrate.sh (${SNAPSHOT_BUCKET}).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rustfs-data
+  namespace: ate-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rustfs
+  namespace: ate-system
+spec:
+  selector:
+    app: rustfs
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rustfs
+  namespace: ate-system
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: rustfs
+  template:
+    metadata:
+      labels:
+        app: rustfs
+    spec:
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: rustfs
+          image: rustfs/rustfs:1.0.0-beta.3@sha256:378642b05b7dcb4849fb77ebe6aca4ced1c3f66e7e504247df95a5c9018d3358
+          ports:
+            - containerPort: 9000
+              name: api
+          env:
+            - name: RUSTFS_ADDRESS
+              value: ":9000"
+            - name: RUSTFS_CONSOLE_ENABLE
+              value: "false"
+            - name: RUSTFS_VOLUMES
+              value: /data
+            - name: RUSTFS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: ate-snapshot-storage, key: AWS_ACCESS_KEY_ID }
+            - name: RUSTFS_SECRET_KEY
+              valueFrom:
+                secretKeyRef: { name: ate-snapshot-storage, key: AWS_SECRET_ACCESS_KEY }
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: rustfs-data
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rustfs-bucket-init
+  namespace: ate-system
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: create-bucket
+          image: amazon/aws-cli:2.17.0@sha256:643507c10ada7964ca6157b3d799f030b90577643da9955d319a77399ed80d73
+          envFrom:
+            - secretRef:
+                name: ate-snapshot-storage
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              for i in $(seq 1 60); do
+                aws s3api head-bucket --bucket "${SNAPSHOT_BUCKET}" 2>/dev/null && exit 0
+                aws s3api create-bucket --bucket "${SNAPSHOT_BUCKET}" && exit 0
+                echo "rustfs pas encore prêt ($i/60)"; sleep 2
+              done
+              exit 1

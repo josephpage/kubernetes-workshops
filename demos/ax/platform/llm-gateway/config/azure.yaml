@@ -1,0 +1,12 @@
+# Azure OpenAI (Microsoft Foundry). ${LLM_MODEL} est le nom du déploiement
+# créé par terraform/azure.
+model_list:
+  - model_name: workshop-model
+    litellm_params:
+      model: azure/${LLM_MODEL}
+      api_base: os.environ/LLM_API_BASE
+      api_key: os.environ/LLM_API_KEY
+      api_version: ${LLM_API_VERSION}
+
+litellm_settings:
+  drop_params: true

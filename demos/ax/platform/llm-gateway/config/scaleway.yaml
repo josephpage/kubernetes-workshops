@@ -1,0 +1,13 @@
+# Scaleway Generative APIs (API compatible OpenAI, hébergée en France).
+# Rendu par scripts/40-install-llm-gateway.sh ; os.environ/... est résolu par
+# LiteLLM au démarrage, depuis le Secret llm-gateway-credentials.
+model_list:
+  - model_name: workshop-model
+    litellm_params:
+      model: openai/${LLM_MODEL}
+      api_base: os.environ/LLM_API_BASE
+      api_key: os.environ/LLM_API_KEY
+
+litellm_settings:
+  # Ignore les paramètres que le modèle ne connaît pas au lieu d'échouer.
+  drop_params: true

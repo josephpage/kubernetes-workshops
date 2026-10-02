@@ -1,0 +1,6 @@
+# Copiez ce fichier en `.envrc` (ignoré par git) et remplacez les valeurs.
+# Nécessite direnv (https://direnv.net/), ou bien : source .envrc
+export SCW_ACCESS_KEY="REPLACE_ME"
+export SCW_SECRET_KEY="REPLACE_ME"
+export SCW_DEFAULT_PROJECT_ID="REPLACE_ME"
+export SCW_DEFAULT_ORGANIZATION_ID="REPLACE_ME"

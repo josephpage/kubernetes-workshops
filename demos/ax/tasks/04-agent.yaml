@@ -1,0 +1,42 @@
+# Exercice 5 : un agent de code (OpenCode) corrige un projet Python dans sa sandbox.
+#   ./scripts/render.sh tasks/04-agent.yaml | ax apply -f -
+#   kubectl ate create egress-policy agent-kata -a default -f platform/egress/agent-policy.yaml
+#
+# Le dépôt est cloné par la commande, une fois la sandbox démarrée, et non par
+# un Workspace : en AX v0.3.1, le clonage d'un Workspace a lieu avant que
+# Substrate n'ouvre la sortie réseau de la sandbox (voir exercice 2).
+apiVersion: ax.io/v1alpha1
+kind: Task
+metadata:
+  name: agent-kata
+  atespace: ${ATESPACE}
+spec:
+  image: "${AGENT_IMAGE}"
+  command:
+    - sh
+    - -c
+    - |
+      exec > /workspace/agent.log 2>&1
+      echo "[$(date +%T)] attente de la passerelle LLM (EgressPolicy de l'acteur)..."
+      until curl -sf -o /dev/null --max-time 5 "$LLM_GATEWAY_URL/models"; do sleep 3; done
+      echo "[$(date +%T)] clonage du kata ($KATA_BRANCH)"
+      git clone --quiet --depth 1 --branch "$KATA_BRANCH" https://github.com/josephpage/kubernetes-workshops.git /workspace/repo
+      cd /workspace/repo/demos/ax/kata
+      echo "[$(date +%T)] tests avant l'agent"
+      python -m pytest -q -p no:cacheprovider
+      echo "[$(date +%T)] lancement de l'agent"
+      opencode run --auto "Fais passer les tests de ce projet Python (commande : python -m pytest -q). Corrige uniquement calculatrice.py, ne modifie pas les tests. Termine en relançant les tests."
+      echo "[$(date +%T)] tests après l'agent"
+      python -m pytest -q -p no:cacheprovider
+      echo "[$(date +%T)] code de sortie : $?"
+  env:
+    # Seule information remise à la sandbox pour joindre un LLM : l'adresse de
+    # la passerelle du cluster. Aucune clé de fournisseur.
+    - name: LLM_GATEWAY_URL
+      value: "http://litellm.llm-gateway.svc.cluster.local:4000/v1"
+    - name: KATA_BRANCH
+      value: "${KATA_BRANCH}"
+  resources:
+    requests: { cpu: "500m", memory: "1Gi" }
+    limits: { cpu: "2", memory: "2Gi" }
+  debug: true

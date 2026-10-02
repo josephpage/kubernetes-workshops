@@ -1,0 +1,32 @@
+# Capacité physique sur laquelle Substrate « fait atterrir » les sandboxes d'AX.
+# Rendu par scripts/10-install-substrate.sh : ${WORKER_IMAGE} est l'image
+# ateom-gvisor construite par l'installeur de Substrate.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ax-workers
+---
+apiVersion: ate.dev/v1alpha1
+kind: WorkerPool
+metadata:
+  name: ax-workers
+  namespace: ax-workers
+  labels:
+    workload: ax
+spec:
+  # 3 pods « chauds » qui attendent des sandboxes. Une tâche AX suspendue libère
+  # son worker : on peut donc avoir plus de tâches que de workers (exercice 5).
+  replicas: 3
+  sandboxClass: gvisor
+  workerImage: ${WORKER_IMAGE}
+  template:
+    # Les limites fixent la capacité de chaque worker (l'enveloppe partagée par
+    # ses sandboxes) ; les requests servent au placement par le kube-scheduler.
+    # La mémoire n'est pas compressible : request = limit.
+    resources:
+      limits:
+        cpu: "2"
+        memory: 3Gi
+      requests:
+        cpu: 200m
+        memory: 3Gi
