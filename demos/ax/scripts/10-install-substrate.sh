@@ -43,6 +43,18 @@ if [[ "${SNAPSHOT_BACKEND}" == "s3" ]]; then
   fi
 fi
 
+if [[ -n "${ATELET_LOCALHOST_REGISTRY:-}" ]]; then
+  # Variante locale : atelet tire les sandboxes du registre local (voir
+  # platform/substrate/local-registry).
+  log "Ajout du composant « local-registry » (${ATELET_LOCALHOST_REGISTRY})"
+  component="${SUBSTRATE_DIR}/manifests/ate-install/components/ax-workshop-local-registry"
+  mkdir -p "${component}"
+  render "${AX_DEMO_DIR}/platform/substrate/local-registry/kustomization.yaml" > "${component}/kustomization.yaml"
+  if ! grep -q 'ax-workshop-local-registry' "${SUBSTRATE_DIR}/manifests/ate-install/agentgateway/kustomization.yaml"; then
+    (cd "${SUBSTRATE_DIR}/manifests/ate-install/agentgateway" && kustomize edit add component ../components/ax-workshop-local-registry)
+  fi
+fi
+
 # VERSION fige le label ate.dev/substrate-version posé sur les nœuds (sans lui,
 # l'installeur utiliserait `git describe --dirty` : le clone vient d'être modifié).
 export VERSION="${SUBSTRATE_VERSION}"

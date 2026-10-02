@@ -20,19 +20,24 @@ COPY --from=ax . .
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags="-s -w" -o /out/ax-task-runner ./cmd/ax-task-runner
 
-# 2. OpenCode et dépendances Python, téléchargés pour l'architecture cible.
+# 2. OpenCode, ripgrep et dépendances Python, téléchargés pour l'architecture cible.
+#    ripgrep : sans rg dans le PATH, OpenCode le télécharge au premier appel de
+#    ses outils de recherche, et son extraction échoue dans gVisor (chown refusé).
 FROM --platform=$BUILDPLATFORM ${PYTHON_IMAGE} AS deps
 ARG TARGETARCH
 ARG OPENCODE_VERSION
+ARG RIPGREP_VERSION
 RUN set -eux; \
     case "${TARGETARCH}" in \
-      amd64) oc=x64-baseline; plat=x86_64 ;; \
-      arm64) oc=arm64; plat=aarch64 ;; \
+      amd64) oc=x64-baseline; plat=x86_64; rg=x86_64-unknown-linux-musl ;; \
+      arm64) oc=arm64; plat=aarch64; rg=aarch64-unknown-linux-gnu ;; \
       *) echo "architecture non supportée : ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
     mkdir -p /opt/opencode/bin; \
     curl -fsSL "https://github.com/anomalyco/opencode/releases/download/${OPENCODE_VERSION}/opencode-linux-${oc}.tar.gz" \
       | tar -xz -C /opt/opencode/bin; \
+    curl -fsSL "https://github.com/BurntSushi/ripgrep/releases/download/${RIPGREP_VERSION}/ripgrep-${RIPGREP_VERSION}-${rg}.tar.gz" \
+      | tar -xz --no-same-owner --strip-components=1 -C /opt/opencode/bin "ripgrep-${RIPGREP_VERSION}-${rg}/rg"; \
     pip install --no-cache-dir --target /opt/python --only-binary=:all: \
       --python-version 3.12 --implementation cp \
       --platform "manylinux_2_17_${plat}" --platform "manylinux2014_${plat}" --platform "manylinux_2_28_${plat}" \

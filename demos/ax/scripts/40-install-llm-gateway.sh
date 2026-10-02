@@ -8,7 +8,7 @@ load_workshop_env
 export LITELLM_IMAGE
 
 config="${AX_DEMO_DIR}/platform/llm-gateway/config/${LLM_PROVIDER}.yaml"
-[[ -f "${config}" ]] || die "fournisseur LLM inconnu : ${LLM_PROVIDER} (attendu : scaleway, aws, gcp ou azure)"
+[[ -f "${config}" ]] || die "fournisseur LLM inconnu : ${LLM_PROVIDER} (attendu : scaleway, aws, gcp, azure ou local)"
 
 log "Passerelle LLM : ${LLM_PROVIDER} / ${LLM_MODEL}"
 render "${AX_DEMO_DIR}/platform/llm-gateway/litellm.yaml" | kubectl apply -f -

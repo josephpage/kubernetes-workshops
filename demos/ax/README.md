@@ -5,7 +5,7 @@
 Dans cet atelier, vous installez la pile complète sur un cluster managé, vous manipulez le cycle de vie des sandboxes (création, `ax ssh`, suspend/resume, densité), vous diagnostiquez un vrai incident d'intégration entre AX et Substrate, puis vous faites corriger un projet Python par un **agent de code (OpenCode)** qui appelle le **LLM du cloud hôte** via une passerelle interne, sans qu'aucune clé ne soit présente dans la sandbox.
 
 > [!WARNING]
-> AX (v0.3.1) et Agent Substrate (v0.3.0) sont pré-1.0 : leurs APIs changent d'une version mineure à l'autre. L'atelier épingle toutes les versions dans [versions.env](versions.env) et a été validé de bout en bout le 2026-10-02 sur Scaleway Kapsule 1.37.0. Les écarts constatés avec la documentation amont sont signalés dans le déroulé.
+> AX (v0.3.1) et Agent Substrate (v0.3.0) sont pré-1.0 : leurs APIs changent d'une version mineure à l'autre. L'atelier épingle toutes les versions dans [versions.env](versions.env) et a été validé de bout en bout le 2026-10-02 sur Scaleway Kapsule 1.37.0, ainsi qu'en local sur k3s 1.37.1 (Colima, Mac M1 Pro). Les écarts constatés avec la documentation amont sont signalés dans le déroulé.
 
 ---
 
@@ -14,7 +14,7 @@ Dans cet atelier, vous installez la pile complète sur un cluster managé, vous 
 - **Niveau** : avancé.
 - **Durée cible** : 150 minutes (dont environ 25 minutes de provisionnement et de builds, à lancer en début de séance).
 - **Public** : consultants OCTO (Cloud, DevOps, plateformes IA) et participants Octo Academy à l'aise avec Kubernetes.
-- **Environnement cible** : un cluster managé Kubernetes **1.37+** par participant ou binôme. **Scaleway Kapsule** par défaut ; variantes GKE, AKS et EKS fournies.
+- **Environnement cible** : un cluster managé Kubernetes **1.37+** par participant ou binôme. **Scaleway Kapsule** par défaut ; variantes GKE, AKS et EKS fournies, ainsi qu'une **variante locale** sur Mac Apple Silicon (Colima + k3s, LLM du poste via LM Studio, Ollama ou équivalent), sans aucun compte cloud.
 
 ---
 
@@ -51,14 +51,17 @@ Agent Substrate exige les APIs `certificates.k8s.io` `PodCertificateRequest` et 
 | **Google GKE** | canal RAPID | [terraform/gcp](terraform/gcp) | Artifact Registry | GCS (backend natif) | Vertex AI (`gemini-3.8-flash`) | ⚠️ `tofu validate` uniquement |
 | **Azure AKS** | preview (GA annoncée en octobre 2026) | [terraform/azure](terraform/azure) | ACR (lecture anonyme) | rustfs dans le cluster | Azure OpenAI (`gpt-5.1`) | ⚠️ `tofu validate` uniquement |
 | **AWS EKS** | non disponible (1.36 max.) | [terraform/aws](terraform/aws) | ECR + ECR Public | S3 (EKS Pod Identity) | Bedrock (`anthropic.claude-opus-5-5`) | ❌ bloqué jusqu'à EKS 1.37 |
+| **Local (Colima + k3s)** | k3s v1.37.1 + API `v1beta1` | [local](local) (scripts, sans Terraform) | registre local (`localhost:5001`) | rustfs dans le cluster | LLM du poste (LM Studio, Ollama...) | ✅ validé de bout en bout (Mac M1 Pro, LM Studio) |
 
 Pourquoi ces différences :
 
 - **Registre** : atelet (Substrate v0.3.0) tire lui-même l'image des sandboxes et ne sait s'authentifier qu'auprès des registres GCP. Hors GKE, cette image doit donc être **lisible anonymement** (registre Scaleway public, ACR en lecture anonyme, ECR Public).
 - **Snapshots** : l'installation amont écrit dans GCS. Hors GKE, le composant [platform/substrate/non-gke](platform/substrate/non-gke) bascule Substrate sur n'importe quel stockage compatible S3. Azure n'ayant pas d'API S3, un rustfs est déployé dans le cluster.
 - **EKS** n'autorise pas l'activation des APIs bêta : impossible d'utiliser la 1.36. Le Terraform AWS est prêt pour la sortie d'EKS 1.37 (la validation de la variable `kubernetes_version` l'impose).
+- **API `v1beta1`** : même en 1.37, Substrate v0.3.0 lit et écrit les `ClusterTrustBundles` en `certificates.k8s.io/v1beta1`. Kapsule sert cette version ; k3s ne la sert qu'avec l'option `runtime-config` de la variante locale. Sur EKS 1.37, il faudra vérifier qu'elle est servie par défaut, puisqu'on ne peut pas l'activer. Les scripts le contrôlent avant l'installation.
+- **Local** : pas de cloud. Les images sont construites en arm64 et poussées dans un registre du Docker de la VM, et le LLM est celui du Mac (GPU compris), joint depuis le cluster via `host.lima.internal`.
 
-Chaque Terraform produit le même fichier `demos/ax/workshop.env` (voir [terraform/workshop.env.tftpl](terraform/workshop.env.tftpl)) : les scripts et le reste de l'atelier sont identiques sur les 4 clouds.
+Chaque Terraform produit le même fichier `demos/ax/workshop.env` (voir [terraform/workshop.env.tftpl](terraform/workshop.env.tftpl)) : les scripts et le reste de l'atelier sont identiques sur les 4 clouds. La variante locale produit ce même fichier avec [local/up.sh](local/up.sh).
 
 ---
 
@@ -122,7 +125,7 @@ kustomize version     # composant non-gke
 git --version; perl -v | head -2
 ```
 
-- `go`, `ko` et le CLI `ax` : `ko` est lancé via `go run` (version épinglée), rien d'autre à installer. Ajoutez `$(go env GOPATH)/bin` à votre `PATH` pour `ax` et `kubectl-ate`.
+- `go`, `ko` et le CLI `ax` : `ko` est lancé via `go run` (version épinglée), rien d'autre à installer. Ajoutez le répertoire où `go install` dépose les binaires à votre `PATH` pour `ax` et `kubectl-ate` : `$(go env GOBIN)` s'il est défini (c'est le cas avec mise), `$(go env GOPATH)/bin` sinon.
 - Sur un Mac ARM, l'image des sandboxes (amd64) se construit **sans émulation** : toutes les étapes lourdes du [Dockerfile](images/agent-runner/Dockerfile) tournent sur l'architecture de la machine.
 
 ### Accès cloud
@@ -135,6 +138,31 @@ source terraform/scaleway/.envrc
 ```
 
 Variantes : `aws sso login` (ou un profil) pour AWS ; `gcloud auth application-default login` et `export TF_VAR_project_id=...` pour GCP ; `az login` et `export ARM_SUBSCRIPTION_ID=...` pour Azure.
+
+### Variante locale : Colima sur Mac Apple Silicon
+
+Aucun accès cloud n'est nécessaire. Il faut un Mac Apple Silicon avec 32 Gio de mémoire et environ 15 Gio d'espace disque libre, [Colima](https://github.com/abiosoft/colima), et un **serveur LLM local** compatible OpenAI (LM Studio, Ollama, llama.cpp...).
+
+**Cluster** : créez un profil Colima dédié, avec k3s 1.37.
+
+```bash
+colima start -p kubernetes --cpu 6 --memory 16 --disk 40 \
+  --network-address --kubernetes --kubernetes-version v1.37.1+k3s1 \
+  --k3s-arg=--disable=traefik \
+  --k3s-arg=--kube-apiserver-arg=runtime-config=certificates.k8s.io/v1beta1=true
+```
+
+- Le profil s'appuie sur la virtualisation d'Apple (`vz`) et les montages `virtiofs`, choisis par défaut par Colima. Le runtime Docker de la VM sert aussi de runtime au kubelet de k3s.
+- k3s doit être en 1.37 : en 1.36, `ClusterTrustBundle` et `PodCertificateRequest` ne sont pas servies sans activer leurs APIs bêta.
+- En 1.37, ces APIs sont servies en `v1`, mais Substrate v0.3.0 écrit encore les `ClusterTrustBundles` en `v1beta1`, que k3s ne sert pas par défaut : d'où l'option `runtime-config`. Sans elle, l'installation reste bloquée sur « Waiting for podcertificate ClusterTrustBundles ». Sur un profil existant, ajoutez l'option dans `kubernetes.k3sArgs` du fichier `~/.colima/kubernetes/colima.yaml`, puis redémarrez le profil (`colima stop -p kubernetes && colima start -p kubernetes`).
+- Tout tourne en arm64 : l'image des sandboxes, les images de Substrate et d'AX, et gVisor.
+
+**LLM** : il tourne sur le Mac, hors de la VM. La VM Colima n'a pas accès au GPU, et un modèle dans le cluster coûterait plusieurs Go de disque. Le modèle doit :
+
+- **savoir appeler des outils** (OpenCode en dépend) ;
+- être chargé avec un **contexte d'au moins 32 000 tokens** : le prompt système d'OpenCode dépasse les 4 096 à 8 192 tokens que LM Studio et Ollama allouent souvent par défaut. Avec un contexte trop court, l'agent tourne en boucle (il relance les tests sans jamais modifier le code). Sous LM Studio : `lms load <modèle> --context-length 32768`, puis vérifiez la colonne `CONTEXT` de `lms ps`. Sous Ollama : `OLLAMA_CONTEXT_LENGTH=32768 ollama serve`.
+
+Notez l'URL du serveur vue depuis le Mac (`http://127.0.0.1:1234` pour LM Studio, `http://127.0.0.1:11434` pour Ollama), l'identifiant du modèle (`curl <url>/v1/models`) et, si le serveur en exige un, son jeton d'API.
 
 ---
 
@@ -181,6 +209,35 @@ podcertificaterequests                    certificates.k8s.io/v1   true         
 ```
 
 > Le Terraform crée aussi une **application IAM dédiée** (Object Storage + Generative APIs) : c'est sa clé, et non la vôtre, qui est remise au cluster.
+
+#### Variante locale (≈ 1 min, profil Colima déjà démarré)
+
+Indiquez le serveur LLM du poste (exemple avec LM Studio ; `LOCAL_LLM_API_KEY` est facultatif) :
+
+```bash
+LOCAL_LLM_URL=http://127.0.0.1:1234 \
+LOCAL_LLM_MODEL=<identifiant-du-modèle> \
+LOCAL_LLM_API_KEY=<jeton-si-requis> \
+  ./local/up.sh
+source workshop.env      # exporte KUBECONFIG, DOCKER_CONTEXT, IMAGE_REPO, LLM_*...
+kubectl get nodes
+```
+
+```text
+NAME                STATUS   ROLES           AGE   VERSION
+colima-kubernetes   Ready    control-plane   5m    v1.37.1+k3s1
+```
+
+Le script ([local/up.sh](local/up.sh)) remplace `tofu apply` :
+
+1. il vérifie que le serveur LLM répond et connaît le modèle ;
+2. il écrit un kubeconfig dédié (`~/.kube/kubeconfig-ax-local`) et vérifie les APIs de certificats ;
+3. il démarre un **registre local** sans TLS (`ax-registry`, conteneur du Docker de la VM). Colima le redirige vers `localhost:5001` sur le Mac : ko et Docker y poussent les images, le kubelet les y tire ;
+4. il génère `workshop.env` : snapshots dans un **rustfs** déployé dans le cluster (comme sur Azure), images en arm64 uniquement, LLM du poste joint depuis le cluster via `host.lima.internal`, le nom du Mac vu depuis la VM.
+
+Les valeurs `LOCAL_LLM_*` sont conservées dans `workshop.env` : relancer `./local/up.sh` (après un redémarrage de la VM, par exemple) ne demande pas de les repréciser. Pas de `docker login` : le registre local est anonyme.
+
+Un détail mérite l'attention : atelet tire lui-même l'image des sandboxes depuis son pod, où `localhost` désigne le pod et non le nœud. Le composant [platform/substrate/local-registry](platform/substrate/local-registry) lui fait donc réécrire `localhost:5001` vers l'adresse du nœud (option `--localhost-registry-replacement`, celle qu'utilise le cluster kind de développement de Substrate).
 
 ### Étape 1 : Installer Agent Substrate (≈ 10 min au premier lancement)
 
@@ -244,7 +301,7 @@ Le CLI `ax` suit votre contexte Kubernetes et ouvre lui-même un tunnel vers `ax
 ./scripts/30-build-agent-image.sh
 ```
 
-L'[image](images/agent-runner/Dockerfile) contient le runner d'AX (`/usr/local/bin/ax-task-runner`, PID 1 de chaque sandbox), l'agent OpenCode configuré sur la passerelle LLM ([opencode.json](images/agent-runner/opencode.json)), Python et pytest.
+L'[image](images/agent-runner/Dockerfile) contient le runner d'AX (`/usr/local/bin/ax-task-runner`, PID 1 de chaque sandbox), l'agent OpenCode configuré sur la passerelle LLM ([opencode.json](images/agent-runner/opencode.json)), ripgrep, Python et pytest. ripgrep est embarqué parce qu'OpenCode le télécharge sinon au premier appel de ses outils de recherche, et que l'extraction de l'archive échoue dans gVisor.
 
 > **Les images doivent être épinglées par digest.** Substrate refuse un `ActorTemplate` dont l'image n'est désignée que par un tag (`must be pinned by digest`) : un golden snapshot doit rester reproductible. [scripts/render.sh](scripts/render.sh) résout donc le digest et l'injecte dans les manifests des exercices.
 
@@ -292,7 +349,7 @@ kubectl get pods -n ax-workers
 
 À observer :
 
-- le noyau `4.19.0-gvisor` : la commande s'exécute dans **gVisor**, un noyau applicatif qui intercepte les appels système, et non directement sur le noyau du nœud ;
+- le noyau `4.19.0-gvisor` : la commande s'exécute dans **gVisor**, un noyau applicatif qui intercepte les appels système, et non directement sur le noyau du nœud (`aarch64` au lieu de `x86_64` dans la variante locale) ;
 - `ax-task-runner` en PID 1 : il prépare les Workspaces, sert les métadonnées sur le port 80, lance `spec.command` et **reste vivant après la fin de la commande** ;
 - un `ActorTemplate` `hello-tmpl-<hash>` a été créé pour la Task, puis un acteur `hello` placé sur un worker existant : **aucun nouveau pod**.
 
@@ -374,6 +431,15 @@ L'acteur est `ACTOR_STATE_SUSPENDED`, sans worker. Son état est parti dans le s
 ```bash
 AWS_ACCESS_KEY_ID=$S3_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY \
   aws s3 ls --recursive --endpoint-url "$S3_ENDPOINT" --region "$S3_REGION" "s3://${SNAPSHOT_LOCATION#gs://}/"
+```
+
+Avec rustfs (Azure, variante locale), le stockage n'est joignable que depuis le cluster : ouvrez un tunnel, puis remplacez l'endpoint.
+
+```bash
+kubectl -n ate-system port-forward svc/rustfs 9000:9000 &
+AWS_ACCESS_KEY_ID=$S3_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY \
+  aws s3 ls --recursive --endpoint-url http://localhost:9000 --region "$S3_REGION" "s3://${SNAPSHOT_LOCATION#gs://}/"
+kill %1
 ```
 
 Reprenez la Task et comparez :
@@ -546,6 +612,14 @@ tofu destroy
 
 `tofu destroy` supprime le cluster (et ses volumes), le registre, le bucket de snapshots (avec son contenu), l'application IAM et sa clé, ainsi que les fichiers locaux générés (`~/.kube/kubeconfig-ax-workshop`, `demos/ax/workshop.env`).
 
+**Variante locale** : remplacez `tofu destroy` par
+
+```bash
+./local/down.sh
+```
+
+Le script ([local/down.sh](local/down.sh)) supprime les namespaces de l'atelier (dont le volume de rustfs), le registre local et ses images, `~/.kube/kubeconfig-ax-local` et `workshop.env`. Il rend ensuite à macOS l'espace libéré dans la VM (`fstrim`) : sans cela, le disque virtuel ne rétrécit pas. La VM et le cluster restent disponibles pour d'autres ateliers. Les CRD et objets globaux de Substrate demeurent ; pour repartir d'un cluster vierge, lancez `colima kubernetes reset -p kubernetes`, ou `colima delete -p kubernetes` pour supprimer la VM.
+
 Coûts : sur Kapsule, compter environ 0,25 €/h pour deux nœuds PRO2-XS, plus quelques centimes d'inférence et de stockage. Sur GKE, AKS et EKS, le plan de contrôle et la passerelle NAT (AWS) sont facturés en plus : ne laissez pas l'environnement tourner après la séance.
 
 Le répertoire `.work/` (clones d'AX et de Substrate, manifests résolus) peut être supprimé sans risque.
@@ -570,6 +644,7 @@ Le répertoire `.work/` (clones d'AX et de Substrate, manifests résolus) peut �
 - Lancez `tofu apply` puis les étapes 1 à 3 **en début de séance** (ou la veille) : environ 25 minutes cumulées, dont 10 de build ko pour Substrate. Pendant ce temps, présentez l'architecture et les concepts.
 - Vérifiez la disponibilité de Kubernetes 1.37 chez le fournisseur choisi (`scw k8s version list`, `gcloud container get-server-config`, `az aks get-versions`, `aws eks describe-cluster-versions`).
 - Après la fusion de l'atelier, le kata est cloné depuis `main`. Pour tester une branche : `KATA_BRANCH=<branche> ./scripts/render.sh tasks/04-agent.yaml | ax apply -f -`.
+- **Variante locale** : faites créer le profil Colima et lancer les étapes 0 à 3 avant la séance. Vérifiez qu'il reste au moins 15 Gio libres sur le disque du Mac, et que le modèle local est chargé avec un contexte d'au moins 32 000 tokens.
 
 ### Temps indicatifs mesurés (Kapsule, 2 × PRO2-XS)
 
@@ -583,18 +658,36 @@ Le répertoire `.work/` (clones d'AX et de Substrate, manifests résolus) peut �
 | Suspend / resume | ≈ 3 s chacun |
 | Exécution de l'agent sur le kata | ≈ 30 s |
 
+### Temps indicatifs mesurés (variante locale, Mac M1 Pro, VM de 6 vCPU et 16 Gio)
+
+| Étape | Durée |
+|---|---|
+| `local/up.sh` | < 1 min |
+| Installation de Substrate (relance, cache Go déjà rempli) | ≈ 6 min |
+| Installation d'AX | ≈ 2 min |
+| Image des sandboxes (arm64, natif) | ≈ 6 min |
+| Création d'une Task jusqu'à `Ready` | ≈ 6 s |
+| Suspend / resume | ≈ 1 s chacun |
+| Exécution de l'agent sur le kata (LM Studio, `ornith-1.5-9b-mlx`, contexte 32k) | ≈ 3 min 20 s |
+
+Le premier lancement de l'installation de Substrate compile tout depuis zéro et dure plus longtemps. La durée de l'agent dépend surtout du modèle local et de sa longueur de contexte.
+
 ### Erreurs fréquentes
 
 - **`must be pinned by digest`** dans `ax describe task` : manifest appliqué sans `scripts/render.sh`, ou image non poussée. Lancez `./scripts/30-build-agent-image.sh`.
 - **`ActorCreationFailed ... actor template not found`** : conséquence de l'erreur précédente (AX ne remonte pas la cause ; lisez `kubectl -n ax-system logs deploy/ax-controller`).
 - **`resource project with ID ... is not found`** (Scaleway) : le projet par défaut de votre profil `scw` n'existe pas ou n'est pas accessible avec cette clé. Exportez `SCW_DEFAULT_PROJECT_ID` (voir `scw account project list`).
 - **`BucketAlreadyOwnedByYou`** (Scaleway, après un `apply` interrompu) : le bucket a été créé mais n'est pas dans l'état. `tofu import scaleway_object_bucket.snapshots fr-par/<nom>@<project-id>`, puis relancez `tofu apply`.
-- **Installation de Substrate bloquée sur « Waiting for podcertificate ClusterTrustBundles »** : cluster antérieur à 1.37 (ou 1.36 sans APIs bêta).
+- **Installation de Substrate bloquée sur « Waiting for podcertificate ClusterTrustBundles »** : cluster antérieur à 1.37 (ou 1.36 sans APIs bêta), ou `certificates.k8s.io/v1beta1` non servie (`the server could not find the requested resource` dans `kubectl -n podcertificate-controller-system logs deploy/podcertificate-controller`). C'est le cas de k3s sans l'option `runtime-config` de la variante locale.
 - **`no matches for kind "PodMonitoring"`** : le composant `non-gke` n'a pas été appliqué (`SNAPSHOT_BACKEND` doit valoir `s3` hors GKE).
 - **Atelet n'est sur aucun nœud** : un nœud ajouté après l'installation n'a pas le label `ate.dev/substrate-version`. `kubectl label node <nœud> ate.dev/substrate-version=v0.3.0`.
 - **`denied: ... unauthorized` pendant les builds** : `docker login` au registre de session non fait (étape 0).
 - **L'agent attend indéfiniment la passerelle** : `EgressPolicy` absente ou nom d'hôte/port incorrect. Les refus apparaissent dans `kubectl -n ate-system logs deploy/atenet-egress`.
+- **`serveur LLM injoignable ou jeton refusé`** (variante locale, `local/up.sh`) : le serveur LLM du Mac est arrêté, écoute sur un autre port, ou exige un jeton (`LOCAL_LLM_API_KEY`).
+- **Le disque du Mac se remplit** (variante locale) : le disque virtuel de Colima grossit avec les images et ne rend pas seul l'espace libéré dans la VM. Supprimez ce qui ne sert plus (`docker builder prune -af`), puis lancez `colima ssh -p kubernetes -- sudo fstrim /var/lib/docker`.
+- **L'agent tourne en rond ou ne termine pas** (variante locale) : modèle local trop petit, ou contexte trop court (OpenCode perd alors le début de la conversation). Rechargez le modèle avec 32 000 tokens de contexte ou plus, ou essayez un modèle plus gros.
+- **Après un redémarrage de la VM Colima** (variante locale) : relancez `./local/up.sh`, qui régénère le kubeconfig (le port de l'API peut changer). Si l'adresse du nœud a changé, relancez aussi `./scripts/10-install-substrate.sh`, pour qu'atelet pointe vers la nouvelle adresse du registre.
 
 ### Versions épinglées
 
-Toutes dans [versions.env](versions.env) : AX v0.3.1, Agent Substrate v0.3.0, ko v0.19.1, OpenCode v1.18.34, LiteLLM v1.103.2 (image signée, épinglée par digest). AX v0.3.1 est compilé contre une révision de Substrate antérieure à v0.3.0 ; v0.3.0 est la release la plus proche, et c'est la combinaison validée ici. Avant de monter une version, rejouez l'atelier complet : la branche `main` d'AX a déjà remplacé Redis Streams par une exécution directe et rendu les Tasks immuables.
+Toutes dans [versions.env](versions.env) : AX v0.3.1, Agent Substrate v0.3.0, ko v0.19.1, OpenCode v1.18.34, ripgrep 15.1.0, LiteLLM v1.103.2 (image signée, épinglée par digest) ; pour la variante locale, k3s v1.37.1+k3s1 et le registre `registry:3` (épinglé par digest). AX v0.3.1 est compilé contre une révision de Substrate antérieure à v0.3.0 ; v0.3.0 est la release la plus proche, et c'est la combinaison validée ici. Avant de monter une version, rejouez l'atelier complet : la branche `main` d'AX a déjà remplacé Redis Streams par une exécution directe et rendu les Tasks immuables.

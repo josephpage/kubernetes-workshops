@@ -16,8 +16,9 @@ kubectl get svc api -n ate-system >/dev/null 2>&1 \
   || die "API de Substrate introuvable (svc/api dans ate-system) : lancez d'abord scripts/10-install-substrate.sh"
 
 log "Build des images ax-server et ax-controller (ko) et rendu des manifests"
+# Variante locale : KO_DEFAULTPLATFORMS=linux/arm64 (une seule architecture).
 (cd "${AX_DIR}" && KO_DOCKER_REPO="${IMAGE_REPO}/ax" ko resolve \
-  --base-import-paths --platform=linux/amd64,linux/arm64 \
+  --base-import-paths --platform="${KO_DEFAULTPLATFORMS:-linux/amd64,linux/arm64}" \
   -f deploy/redis.yaml -f deploy/ax-controller.yaml -f deploy/ax-server.yaml) > "${WORK_DIR}/ax-system.yaml"
 
 log "Déploiement dans ax-system"
@@ -38,4 +39,4 @@ log "Installation du CLI ax ${AX_VERSION}"
 ok "AX ${AX_VERSION} est installé"
 kubectl -n ax-system get pods
 echo
-echo "Vérifiez que \$(go env GOPATH)/bin est dans votre PATH, puis : ax version && ax ctx"
+echo "Vérifiez que \$(go env GOBIN) (ou \$(go env GOPATH)/bin s'il est vide) est dans votre PATH, puis : ax version && ax ctx"

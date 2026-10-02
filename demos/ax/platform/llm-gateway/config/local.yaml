@@ -1,0 +1,13 @@
+# Variante locale : serveur compatible OpenAI qui tourne sur le poste du
+# participant (LM Studio, Ollama, llama.cpp...), configuré par local/up.sh.
+# ${LLM_MODEL} est l'identifiant du modèle côté serveur ; LLM_API_BASE pointe
+# vers le Mac vu depuis la VM Colima (host.lima.internal).
+model_list:
+  - model_name: workshop-model
+    litellm_params:
+      model: openai/${LLM_MODEL}
+      api_base: os.environ/LLM_API_BASE
+      api_key: os.environ/LLM_API_KEY
+
+litellm_settings:
+  drop_params: true

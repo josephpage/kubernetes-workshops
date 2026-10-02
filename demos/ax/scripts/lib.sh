@@ -72,5 +72,9 @@ check_cluster_prereqs() {
     || die "l'API ClusterTrustBundle n'est pas servie : Kubernetes 1.37+ requis (ou 1.36 avec les APIs bêta activées)"
   kubectl api-resources --api-group=certificates.k8s.io -o name | grep -q '^podcertificaterequests' \
     || die "l'API PodCertificateRequest n'est pas servie : Kubernetes 1.37+ requis"
+  # Substrate v0.3.0 écrit les ClusterTrustBundles en v1beta1, version que tous
+  # les clusters 1.37 ne servent pas (k3s : --kube-apiserver-arg=runtime-config=...).
+  kubectl get --raw /apis/certificates.k8s.io/v1beta1 2>/dev/null | grep -q '"clustertrustbundles"' \
+    || die "ClusterTrustBundle n'est pas servi en certificates.k8s.io/v1beta1, que Substrate v0.3.0 utilise (option d'API server runtime-config=certificates.k8s.io/v1beta1=true)"
   ok "APIs ClusterTrustBundle et PodCertificateRequest disponibles"
 }
