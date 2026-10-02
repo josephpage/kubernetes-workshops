@@ -1,0 +1,16 @@
+# Exercice 1 : la plus petite Task utile, sans Workspace.
+# ./scripts/render.sh tasks/01-hello.yaml | ax apply -f -
+apiVersion: ax.io/v1alpha1
+kind: Task
+metadata:
+  name: hello
+  atespace: ${ATESPACE}
+spec:
+  image: "${AGENT_IMAGE}"
+  # Le runner d'AX reste PID 1 après la fin de la commande : la sandbox reste
+  # joignable (ax ssh, serveur de métadonnées) même une fois ce script terminé.
+  command: ["sh", "-c", "uname -a > /workspace/hello.txt; echo \"GREETING=$GREETING\" >> /workspace/hello.txt"]
+  env:
+    - name: GREETING
+      value: "Bonjour depuis une sandbox AX"
+  debug: true # sert les guest services : nécessaire pour `ax ssh`

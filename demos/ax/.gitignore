@@ -1,0 +1,12 @@
+# Clones de google/ax et agent-substrate/substrate, manifests résolus par ko.
+.work/
+
+# Généré par OpenTofu : contient des secrets (clés S3, clés LLM).
+workshop.env
+
+# Fichiers Terraform propres à chaque cloud (le .terraform.lock.hcl est commité,
+# comme dans le reste du dépôt).
+terraform/*/.terraform/
+terraform/*/*.tfstate
+terraform/*/*.tfstate.*
+terraform/*/*.tfvars

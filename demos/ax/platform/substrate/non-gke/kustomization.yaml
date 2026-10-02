@@ -1,0 +1,53 @@
+# Composant kustomize « hors GKE » pour Agent Substrate v0.3.0.
+#
+# L'installation par défaut de Substrate (manifests/ate-install/base) cible GKE :
+# snapshots dans GCS via Workload Identity, authentification GCP pour tirer les
+# images, supervision par Google Managed Prometheus. Ce composant, copié dans le
+# clone de Substrate par scripts/10-install-substrate.sh, l'adapte à n'importe
+# quel cluster Kubernetes 1.37+ :
+# - snapshots dans un stockage compatible S3 (Scaleway Object Storage, Amazon S3,
+#   rustfs dans le cluster...), identifiants lus dans le Secret
+#   ate-system/ate-snapshot-storage ;
+# - atelet tire les images des sandboxes sans identifiants GCP ;
+# - pas de PodMonitoring (CRD propre à Google Managed Prometheus).
+#
+# Le mécanisme des variables S3 est celui de l'overlay kind de Substrate
+# (manifests/ate-install/kind), sans ses spécificités locales.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+patches:
+  # atelet : agent de nœud qui restaure et sauvegarde les sandboxes.
+  - target:
+      group: apps
+      version: v1
+      kind: DaemonSet
+      labelSelector: app=atelet
+    patch: |-
+      - op: test
+        path: /spec/template/spec/containers/0/args/0
+        value: --gcp-auth-for-image-pulls=true
+      - op: replace
+        path: /spec/template/spec/containers/0/args/0
+        value: --gcp-auth-for-image-pulls=false
+  - target:
+      group: apps
+      version: v1
+      kind: DaemonSet
+      labelSelector: app=atelet
+    path: s3-env-atelet.yaml
+  # ate-api-server : copie et nettoie les snapshots (tags, golden snapshots).
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: ate-api-server
+    path: s3-env-api-server.yaml
+  # Google Managed Prometheus n'existe que sur GKE.
+  - patch: |-
+      $patch: delete
+      apiVersion: monitoring.googleapis.com/v1
+      kind: PodMonitoring
+      metadata:
+        name: atenet-router-envoy
+        namespace: ate-system

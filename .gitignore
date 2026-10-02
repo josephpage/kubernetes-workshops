@@ -5,6 +5,10 @@
 .envrc
 demos/crossplane/platform/functions.rendered.yaml
 
+# Claude Code : réglages personnels et worktrees (copies complètes du dépôt).
+.claude/settings.local.json
+.claude/worktrees/
+
 # Site Astro Starlight (website/) — détails dans website/.gitignore
 website/node_modules/
 website/dist/

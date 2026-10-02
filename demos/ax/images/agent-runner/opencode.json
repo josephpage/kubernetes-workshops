@@ -1,0 +1,26 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false,
+  "share": "disabled",
+  "model": "workshop/workshop-model",
+  "provider": {
+    "workshop": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Passerelle LLM de l'atelier (LiteLLM)",
+      "options": {
+        "baseURL": "{env:LLM_GATEWAY_URL}",
+        "apiKey": "aucune-cle-dans-la-sandbox"
+      },
+      "models": {
+        "workshop-model": {
+          "name": "Modèle du cloud hôte, routé par LiteLLM",
+          "tool_call": true,
+          "limit": {
+            "context": 128000,
+            "output": 16384
+          }
+        }
+      }
+    }
+  }
+}

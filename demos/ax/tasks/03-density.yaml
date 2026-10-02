@@ -1,0 +1,39 @@
+# Exercice 4 : densité. Quatre Tasks pour trois workers : Substrate place
+# plusieurs sandboxes sur un même pod worker, dans la limite de sa capacité
+# (2 CPU / 3 Gio dans platform/substrate/workerpool.yaml).
+# ./scripts/render.sh tasks/03-density.yaml | ax apply -f -
+apiVersion: ax.io/v1alpha1
+kind: Task
+metadata:
+  name: density-1
+  atespace: ${ATESPACE}
+spec:
+  image: "${AGENT_IMAGE}"
+  command: ["sh", "-c", "date > /workspace/started-at.txt"]
+---
+apiVersion: ax.io/v1alpha1
+kind: Task
+metadata:
+  name: density-2
+  atespace: ${ATESPACE}
+spec:
+  image: "${AGENT_IMAGE}"
+  command: ["sh", "-c", "date > /workspace/started-at.txt"]
+---
+apiVersion: ax.io/v1alpha1
+kind: Task
+metadata:
+  name: density-3
+  atespace: ${ATESPACE}
+spec:
+  image: "${AGENT_IMAGE}"
+  command: ["sh", "-c", "date > /workspace/started-at.txt"]
+---
+apiVersion: ax.io/v1alpha1
+kind: Task
+metadata:
+  name: density-4
+  atespace: ${ATESPACE}
+spec:
+  image: "${AGENT_IMAGE}"
+  command: ["sh", "-c", "date > /workspace/started-at.txt"]

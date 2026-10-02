@@ -1,0 +1,16 @@
+# EgressPolicy Substrate de l'acteur agent-kata (exercice 5).
+#   kubectl ate create egress-policy agent-kata -a default -f platform/egress/agent-policy.yaml
+#
+# Toute sortie d'une sandbox passe par la passerelle de sortie de Substrate
+# (atenet-egress). Sans politique, les requêtes HTTP en clair sont refusées (403).
+# Les règles sont des autorisations ; la plus spécifique l'emporte.
+rules:
+  # La passerelle LLM du cluster (HTTP en clair, port 4000).
+  - http:
+      hostnames: ["litellm.llm-gateway.svc.cluster.local"]
+      ports: { numbers: [4000] }
+  # TLS transmis sans déchiffrement : clonage du kata, paquets npm chargés par
+  # OpenCode au premier lancement, catalogue de modèles d'OpenCode.
+  - tls_passthrough:
+      hostnames: ["github.com", "registry.npmjs.org", "models.opencode.ai"]
+      ports: { numbers: [443] }

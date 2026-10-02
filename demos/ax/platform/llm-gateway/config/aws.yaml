@@ -1,0 +1,11 @@
+# Amazon Bedrock. Pas de clé : LiteLLM (boto3) obtient des identifiants
+# temporaires via EKS Pod Identity, associée au ServiceAccount llm-gateway/litellm
+# par terraform/aws.
+model_list:
+  - model_name: workshop-model
+    litellm_params:
+      model: bedrock/${LLM_MODEL}
+      aws_region_name: ${LLM_AWS_REGION}
+
+litellm_settings:
+  drop_params: true

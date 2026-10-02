@@ -1,0 +1,31 @@
+# Exercice 2 : un Workspace déclaratif (dépôt Git cloné avant le démarrage de la
+# commande) lié à une Task.
+# ./scripts/render.sh tasks/02-workspace.yaml | ax apply -f -
+apiVersion: ax.io/v1alpha1
+kind: Workspace
+metadata:
+  name: chalk
+  atespace: ${ATESPACE}
+spec:
+  git:
+    - name: origin # « origin » : le dossier prend le nom du dépôt (/workspace/chalk)
+      repo: "https://github.com/chalk/chalk.git"
+      branch: "main"
+  skills:
+    path: "/workspace/.agents/skills"
+---
+apiVersion: ax.io/v1alpha1
+kind: Task
+metadata:
+  name: explorer
+  atespace: ${ATESPACE}
+spec:
+  image: "${AGENT_IMAGE}"
+  command: ["sh", "-c", "git -C chalk log --oneline -3 > /workspace/explorer.txt"]
+  resources:
+    requests: { cpu: "250m", memory: "512Mi" }
+    limits: { cpu: "1", memory: "1Gi" }
+  workspaces:
+    - name: chalk
+      path: "/workspace"
+  debug: true

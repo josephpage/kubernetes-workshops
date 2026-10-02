@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ate-api-server
+  namespace: ate-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: ate-api-server
+          env:
+            - name: ATE_STORAGE_BACKEND
+              value: s3
+            - name: AWS_REGION
+              valueFrom:
+                secretKeyRef: { name: ate-snapshot-storage, key: AWS_REGION }
+            - name: AWS_ENDPOINT_URL
+              valueFrom:
+                secretKeyRef: { name: ate-snapshot-storage, key: AWS_ENDPOINT_URL, optional: true }
+            - name: AWS_S3_USE_PATH_STYLE
+              valueFrom:
+                secretKeyRef: { name: ate-snapshot-storage, key: AWS_S3_USE_PATH_STYLE, optional: true }
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef: { name: ate-snapshot-storage, key: AWS_ACCESS_KEY_ID, optional: true }
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: ate-snapshot-storage, key: AWS_SECRET_ACCESS_KEY, optional: true }

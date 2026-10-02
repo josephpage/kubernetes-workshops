@@ -48,6 +48,10 @@ const FILE_MAPPING = [
     destination: 'ateliers/kong.md',
   },
   {
+    source: 'demos/ax/README.md',
+    destination: 'ateliers/ax.md',
+  },
+  {
     source: 'docs/workshop-template.md',
     destination: 'conventions/workshop-template.md',
   },

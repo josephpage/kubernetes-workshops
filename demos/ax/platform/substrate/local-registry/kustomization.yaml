@@ -1,0 +1,22 @@
+# Composant kustomize « registre local » pour Agent Substrate v0.3.0 (variante
+# locale, voir local/up.sh). Rendu puis copié dans le clone de Substrate par
+# scripts/10-install-substrate.sh, en plus du composant non-gke.
+#
+# atelet tire lui-même l'image des sandboxes (localhost:5001/ax-agent-runner).
+# Dans son pod, localhost désigne le pod et non le nœud : l'option
+# --localhost-registry-replacement réécrit localhost:* vers le registre publié
+# sur l'adresse du nœud, et autorise le HTTP pour ce registre réécrit. C'est le
+# mécanisme de l'overlay kind de Substrate (kind-registry:5000).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: DaemonSet
+      labelSelector: app=atelet
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --localhost-registry-replacement=${ATELET_LOCALHOST_REGISTRY}
