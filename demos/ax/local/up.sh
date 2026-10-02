@@ -31,8 +31,13 @@ if [[ -f "${WORKSHOP_ENV}" ]] && ! grep -q '^export AX_CLOUD="local"$' "${WORKSH
   die "${WORKSHOP_ENV} appartient à une session cloud : détruisez-la (tofu destroy) ou déplacez ce fichier"
 fi
 
-# Valeur d'un lancement précédent (vide sinon).
-previous() { [[ -f "${WORKSHOP_ENV}" ]] && sed -n "s/^export $1=\"\(.*\)\"\$/\1/p" "${WORKSHOP_ENV}"; }
+# Valeur d'un lancement précédent (vide sinon), lue en sourçant workshop.env
+# dans un sous-shell, comme le font les scripts de l'atelier.
+previous() {
+  [[ -f "${WORKSHOP_ENV}" ]] || return 0
+  # shellcheck source=/dev/null
+  (source "${WORKSHOP_ENV}" >/dev/null 2>&1 && printf '%s' "${!1:-}")
+}
 
 # --- LLM du poste -----------------------------------------------------------
 LOCAL_LLM_URL="${LOCAL_LLM_URL:-$(previous LOCAL_LLM_URL || true)}"
@@ -99,6 +104,9 @@ S3_ACCESS_KEY_ID="${S3_ACCESS_KEY_ID:-$(openssl rand -hex 12)}"
 S3_SECRET_ACCESS_KEY="${S3_SECRET_ACCESS_KEY:-$(openssl rand -hex 24)}"
 
 log "Écriture de ${WORKSHOP_ENV}"
+# Les valeurs variables sont échappées (printf %q) : le fichier est sourcé par
+# les scripts et par le shell du participant, et un jeton peut contenir ", $ ou `.
+q() { printf '%q' "$1"; }
 (umask 077 && cat > "${WORKSHOP_ENV}") <<EOF
 # Généré par local/up.sh — NE PAS COMMITER : contient des secrets (rustfs, jeton LLM).
 # Même contrat que terraform/workshop.env.tftpl, plus les variables propres à la
@@ -106,10 +114,10 @@ log "Écriture de ${WORKSHOP_ENV}"
 
 # --- Cluster ---------------------------------------------------------------
 export AX_CLOUD="local"
-export CLUSTER_NAME="${KUBE_CONTEXT}"
-export KUBECONFIG="${LOCAL_KUBECONFIG}"
+export CLUSTER_NAME=$(q "${KUBE_CONTEXT}")
+export KUBECONFIG=$(q "${LOCAL_KUBECONFIG}")
 # Les builds docker doivent viser le Docker de ce profil (registre local).
-export DOCKER_CONTEXT="${KUBE_CONTEXT}"
+export DOCKER_CONTEXT=$(q "${KUBE_CONTEXT}")
 
 # --- Images ----------------------------------------------------------------
 export IMAGE_REPO="localhost:${REGISTRY_PORT}"
@@ -117,7 +125,7 @@ export AGENT_IMAGE_REPO="localhost:${REGISTRY_PORT}/ax-agent-runner"
 # Nœud arm64 (Mac Apple Silicon) : une seule architecture à construire.
 export AGENT_IMAGE_PLATFORM="linux/arm64"
 export KO_DEFAULTPLATFORMS="linux/arm64"
-export ATELET_LOCALHOST_REGISTRY="${NODE_IP}:${REGISTRY_PORT}"
+export ATELET_LOCALHOST_REGISTRY=$(q "${NODE_IP}:${REGISTRY_PORT}")
 
 # --- Snapshots des sandboxes : rustfs dans le cluster -------------------------
 export SNAPSHOT_BACKEND="s3"
@@ -125,18 +133,18 @@ export SNAPSHOT_LOCATION="gs://ax-snapshots/ax"
 export S3_ENDPOINT="http://rustfs.ate-system.svc:9000"
 export S3_REGION="us-east-1"
 export S3_FORCE_PATH_STYLE="true"
-export S3_ACCESS_KEY_ID="${S3_ACCESS_KEY_ID}"
-export S3_SECRET_ACCESS_KEY="${S3_SECRET_ACCESS_KEY}"
+export S3_ACCESS_KEY_ID=$(q "${S3_ACCESS_KEY_ID}")
+export S3_SECRET_ACCESS_KEY=$(q "${S3_SECRET_ACCESS_KEY}")
 export S3_IN_CLUSTER="true"
 
 # --- LLM : serveur du poste, derrière la passerelle LiteLLM --------------------
-export LOCAL_LLM_URL="${LOCAL_LLM_URL}"
-export LOCAL_LLM_API_KEY="${LOCAL_LLM_API_KEY}"
+export LOCAL_LLM_URL=$(q "${LOCAL_LLM_URL}")
+export LOCAL_LLM_API_KEY=$(q "${LOCAL_LLM_API_KEY}")
 export LLM_PROVIDER="local"
-export LLM_MODEL="${LOCAL_LLM_MODEL}"
-export LLM_API_BASE="${LLM_API_BASE}"
+export LLM_MODEL=$(q "${LOCAL_LLM_MODEL}")
+export LLM_API_BASE=$(q "${LLM_API_BASE}")
 # LiteLLM exige une clé : valeur factice si le serveur n'en demande pas.
-export LLM_API_KEY="${LOCAL_LLM_API_KEY:-sans-cle}"
+export LLM_API_KEY=$(q "${LOCAL_LLM_API_KEY:-sans-cle}")
 export LLM_API_VERSION=""
 export LLM_AWS_REGION=""
 export LLM_VERTEX_PROJECT=""

@@ -10,7 +10,8 @@ load_workshop_env
 COLIMA_PROFILE="${CLUSTER_NAME#colima-}"
 
 log "Suppression des namespaces de l'atelier"
-kubectl delete namespace llm-gateway ax-system ax-workers ate-system --ignore-not-found --wait=true
+kubectl delete namespace llm-gateway ax-system ax-workers ate-system --ignore-not-found --timeout=5m \
+  || die "des namespaces sont encore en cours de suppression (kubectl get ns) ; pour repartir d'un cluster vierge : colima kubernetes reset -p ${COLIMA_PROFILE}"
 
 log "Suppression du registre local et des images de l'atelier"
 docker rm -f ax-registry >/dev/null 2>&1 || true

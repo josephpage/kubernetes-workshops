@@ -14,17 +14,24 @@ check_cluster_prereqs
 SUBSTRATE_DIR="${WORK_DIR}/substrate"
 clone_at agent-substrate/substrate "${SUBSTRATE_VERSION}" "${SUBSTRATE_DIR}"
 
+# Les composants de l'atelier sont greffés sur l'overlay agentgateway que
+# l'installeur applique. Le clone sert d'une session à l'autre (cloud, local) :
+# on repart de l'overlay d'origine pour ne greffer que les composants de
+# l'environnement courant.
+OVERLAY_DIR="${SUBSTRATE_DIR}/manifests/ate-install/agentgateway"
+COMPONENTS_DIR="${SUBSTRATE_DIR}/manifests/ate-install/components"
+git -C "${SUBSTRATE_DIR}" checkout --quiet -- manifests/ate-install/agentgateway/kustomization.yaml
+rm -rf "${COMPONENTS_DIR}"/ax-workshop-*
+add_component() { (cd "${OVERLAY_DIR}" && kustomize edit add component "../components/$1"); }
+
 kubectl create namespace ate-system --dry-run=client -o yaml | kubectl apply -f -
 
 if [[ "${SNAPSHOT_BACKEND}" == "s3" ]]; then
-  # Hors GKE : on greffe le composant non-gke sur l'overlay agentgateway
-  # que l'installeur applique (voir platform/substrate/non-gke).
+  # Hors GKE : snapshots S3, pas d'authentification GCP pour tirer les images
+  # (voir platform/substrate/non-gke).
   log "Ajout du composant « non-gke » à l'overlay agentgateway de Substrate"
-  rm -rf "${SUBSTRATE_DIR}/manifests/ate-install/components/ax-workshop-non-gke"
-  cp -R "${AX_DEMO_DIR}/platform/substrate/non-gke" "${SUBSTRATE_DIR}/manifests/ate-install/components/ax-workshop-non-gke"
-  if ! grep -q 'ax-workshop-non-gke' "${SUBSTRATE_DIR}/manifests/ate-install/agentgateway/kustomization.yaml"; then
-    (cd "${SUBSTRATE_DIR}/manifests/ate-install/agentgateway" && kustomize edit add component ../components/ax-workshop-non-gke)
-  fi
+  cp -R "${AX_DEMO_DIR}/platform/substrate/non-gke" "${COMPONENTS_DIR}/ax-workshop-non-gke"
+  add_component ax-workshop-non-gke
 
   log "Secret ate-system/ate-snapshot-storage (accès S3 des snapshots)"
   args=(--from-literal=AWS_REGION="${S3_REGION}")
@@ -47,12 +54,10 @@ if [[ -n "${ATELET_LOCALHOST_REGISTRY:-}" ]]; then
   # Variante locale : atelet tire les sandboxes du registre local (voir
   # platform/substrate/local-registry).
   log "Ajout du composant « local-registry » (${ATELET_LOCALHOST_REGISTRY})"
-  component="${SUBSTRATE_DIR}/manifests/ate-install/components/ax-workshop-local-registry"
-  mkdir -p "${component}"
-  render "${AX_DEMO_DIR}/platform/substrate/local-registry/kustomization.yaml" > "${component}/kustomization.yaml"
-  if ! grep -q 'ax-workshop-local-registry' "${SUBSTRATE_DIR}/manifests/ate-install/agentgateway/kustomization.yaml"; then
-    (cd "${SUBSTRATE_DIR}/manifests/ate-install/agentgateway" && kustomize edit add component ../components/ax-workshop-local-registry)
-  fi
+  mkdir -p "${COMPONENTS_DIR}/ax-workshop-local-registry"
+  render "${AX_DEMO_DIR}/platform/substrate/local-registry/kustomization.yaml" \
+    > "${COMPONENTS_DIR}/ax-workshop-local-registry/kustomization.yaml"
+  add_component ax-workshop-local-registry
 fi
 
 # VERSION fige le label ate.dev/substrate-version posé sur les nœuds (sans lui,
